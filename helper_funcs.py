@@ -262,6 +262,22 @@ def plotSens(rev, LSD, vmin = 0.995, vmax = 1.005):
     #fig.colorbar(im)
     axis.set_xlabel("RA [deg]")
     axis.set_ylabel("Freq [MHz]")
+    
+    # Calculate events like solar transit, rise ...
+    ev = events(chime_obs, LSD)
+    # Highlight the day time data
+    sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+    ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+    
+    if sr < ss:
+        axis.axvspan(sr, ss, color="grey", alpha=0.5)
+    else:
+        axis.axvspan(0, ss, color="grey", alpha=0.5)
+        axis.axvspan(sr, 360, color="grey", alpha=0.5)
+
+    axis.axvline(sr, color="k", ls="--", lw=1)
+    axis.axvline(ss, color="k", ls="--", lw=1)
+        
     title = ('rev 0' + str(rev) + ', LSD ' + str(LSD))
     axis.set_title(title, fontsize=20)
     _ = axis.set_xticks(np.arange(0, 361, 45))
@@ -378,7 +394,7 @@ def plotRM_tempSub(rev, LSD, fi = 400, pi = 3):
     # load ringmap
     data = "ringmap_lsd_" + str(LSD) + ".zarr.zip" 
     ringmap = containers.RingMap.from_file(
-            os.path.join(path, data), freq_sel=slice(fi, fi+1))
+            os.path.join(path, data), freq_sel=slice(fi, fi+1), pol_sel=slice(pi, pi + 1))
     csd_arr = LSD + ringmap.index_map["ra"][:] / 360.0
     
     rm = ringmap.map[0, 0, 0]
@@ -459,10 +475,10 @@ def plotRM_tempSub(rev, LSD, fi = 400, pi = 3):
     # Calculate events like solar transit, rise ...
     ev = events(chime_obs, LSD)
         
-    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(12, 16), gridspec_kw=dict(height_ratios=[1, 8, 8], hspace=0.0))
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(14, 13), gridspec_kw=dict(height_ratios=[1, 10], hspace=0.0))
     
-    fontsize = 18
-    labelsize = 18
+    fontsize = 20
+    labelsize = 20
 
     # Plot the flagged out time ranges at the very top
     for ii, (type_, series) in enumerate(flags_by_type.items()):
@@ -476,37 +492,19 @@ def plotRM_tempSub(rev, LSD, fi = 400, pi = 3):
     vl = 5
     cmap = copy.copy(matplotlib.cm.inferno)
     cmap.set_bad("grey")
-    axes[1].imshow(md.T, vmin=-vl, vmax=vl, aspect="auto", extent=(0, 360, -1, 1), origin="lower", cmap=cmap)
+    im = axes[1].imshow(md.T, vmin=-vl, vmax=vl, aspect="auto", extent=(0, 360, -1, 1), origin="lower", cmap=cmap)
     axes[1].set_yticks([-1, -0.5, 0, 0.5, 1])
     axes[1].yaxis.set_tick_params(labelsize = labelsize)
+    axes[1].xaxis.set_tick_params(labelsize = labelsize)
     axes[1].set_ylabel("sin(ZA)", fontsize = fontsize)
+    axes[1].set_xlabel("RA [degrees]", fontsize = fontsize)
+    cb = plt.colorbar(im, aspect=50, orientation='horizontal', pad =0.1);
 
     # Put a ring around the location of the moon if it transits on this day
     if "lunar_transit" in ev:
         lunar_ra = (ev["lunar_transit"] % 1)* 360.0
         lunar_za = np.sin(np.radians(ev["lunar_dec"] - 49.0))
         circle(axes[1], lunar_ra, lunar_za, radius=0.2, facecolor="none", edgecolor="k")
-
-
-    # Plot the sensitivity
-    #sd = sens_arr * np.where(rfi_arr, np.nan, 1)
-    vl = 0.02
-    cmap = copy.copy(matplotlib.cm.viridis)
-    cmap.set_bad("#aaaaaa")
-    imshow_sections(
-        axes[2], (sens_csd % 1) * 360, np.linspace(800.0, 400.0, 1024, endpoint=False),
-        sensrat, vmin=(1 - vl), vmax=(1 + vl), cmap=cmap, aspect='auto'
-    )
-    axes[2].set_xticks([0, 60, 120, 180, 240, 300, 360])
-    axes[2].xaxis.set_tick_params(labelsize = labelsize)
-    axes[2].set_xlim(0, 360)
-    axes[2].set_xlabel("RA [degrees]", fontsize = fontsize)
-    axes[2].set_ylabel("Freq [MHz]", fontsize = fontsize)
-    axes[2].set_ylim(400, 800)
-    axes[2].yaxis.set_tick_params(labelsize = labelsize)
-    axes[2].yaxis.tick_right()
-    axes[2].yaxis.set_label_position("right")
-
 
     # Highlight the day time data
     sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
@@ -521,7 +519,7 @@ def plotRM_tempSub(rev, LSD, fi = 400, pi = 3):
         ax.axvline(sr, color="k", ls="--", lw=1)
         ax.axvline(ss, color="k", ls="--", lw=1)
 
-
+    
     # Give the overall plot a title identifying the CSD
     title = 'rev 0' + str(rev) + ', LSD ' + str(LSD) + f', {freq[0]:.2f}' + ' MHz'
     axes[0].set_title(title, fontsize = fontsize)
