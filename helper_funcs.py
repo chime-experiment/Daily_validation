@@ -288,7 +288,8 @@ def plotSens(rev, LSD, vmin = 0.995, vmax = 1.005):
 # ========================================================================
 
 def plot_stability(
-    rev, lsd, pol=None, min_dec=0.0, min_nfreq=100, norm_sigma=False, max_val=None
+    rev, lsd, pol=None, min_dec=0.0, min_nfreq=100, norm_sigma=False, max_val=None,
+    flag_daytime=True, flag_bad_data=True
 ):
     """Plot the variations in source spectra with respect to a template.
 
@@ -313,6 +314,11 @@ def plot_stability(
         The maximum value of the color scale.  If not provided,
         then default to 3 (sigma) if norm_sigma is true and
         0.05 (fractional units) if norm_sigma is false.
+    flag_daytime : bool
+        Add a shaded region to the figures that indicates the daytime.
+    flag_bad_data : bool
+        Add a shaded region to the figures that indicates data that is bad
+        according to a flag in the database.
     """
 
     if pol is None:
@@ -368,6 +374,26 @@ def plot_stability(
 
     flag = flag[valid][:, ipol] & flag_time[:, np.newaxis, np.newaxis]
 
+    # Calculate sunrise and sunset to indicate daytime data
+    if flag_daytime:
+        ev = events(chime_obs, lsd)
+        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+
+    # Query dataflags
+    if flag_bad_data:
+        bad_time_spans = flag_time_spans(lsd)
+        bad_ra_woverlap = [[(max(chime_obs.unix_to_lsd(bts[1]), lsd) - lsd) * 360,
+                            (min(chime_obs.unix_to_lsd(bts[2]), lsd+1) - lsd) * 360]
+                           for bts in bad_time_spans]
+
+        bad_ra_spans = []
+        for begin, end in sorted(bad_ra_woverlap):
+            if bad_ra_spans and bad_ra_spans[-1][1] >= begin:
+                bad_ra_spans[-1][1] = max(bad_ra_spans[-1][1], end)
+            else:
+                bad_ra_spans.append([begin, end])
+
     # Calculate the fractional deviation in the source spectra
     ds = data.beam[:] - template.beam[:]
 
@@ -404,6 +430,10 @@ def plot_stability(
         npol, 2, width_ratios=[1, 5], wspace=0.04, hspace=0.05
     )
 
+    alpha = 0.25
+    color_bad = "grey"
+    color_day="gold"
+
     # Loop over the requested polarisations
     for pp, pstr in enumerate(pol):
         # Plot the median (over frequency) fractional deviation
@@ -412,6 +442,17 @@ def plot_stability(
         plt.plot(
             med_abs_ds[index, pp], ra_grid, color="k", linestyle="-", marker="None"
         )
+
+        if flag_daytime:
+            if sr < ss:
+                plt.axhspan(sr, ss, color=color_day, alpha=alpha)
+            else:
+                plt.axhspan(0, ss, color=color_day, alpha=alpha)
+                plt.axhspan(sr, 360, color=color_day, alpha=alpha)
+
+        if flag_bad_data:
+            for brs in bad_ra_spans:
+                plt.axhspan(brs[0], brs[1], color=color_bad, alpha=alpha)
 
         plt.xlim([0.0, max_val])
         plt.ylim(ra_grid[0], ra_grid[-1])
@@ -451,6 +492,19 @@ def plot_stability(
 
         cbar = plt.colorbar(img)
         cbar.set_label(lbl)
+
+        if flag_daytime:
+            if sr < ss:
+                plt.axhspan(sr, ss, color=color_day, alpha=alpha)
+            else:
+                plt.axhspan(0, ss, color=color_day, alpha=alpha)
+                plt.axhspan(sr, 360, color=color_day, alpha=alpha)
+
+        if flag_bad_data:
+            for brs in bad_ra_spans:
+                plt.axhspan(brs[0], brs[1], color=color_bad, alpha=alpha)
+
+        plt.ylim(extent[2], extent[3])
 
         plt.gca().axes.get_yaxis().set_ticklabels([])
         if pp < (npol - 1):
