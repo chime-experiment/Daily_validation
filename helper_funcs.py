@@ -1,17 +1,20 @@
+import os
+import copy
+
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from skyfield import almanac
 
-import os
+from caput import weighted_median
+from caput import time as ctime
 from draco.core import containers
 from draco.util import tools
-from ch_util import ephemeris
+from draco.analysis.sidereal import _search_nearest
+from ch_util import ephemeris, rfi
 from chimedb import core, dataflag as df
-import copy
-from skyfield import almanac
-from caput import time as ctime
 
 eph = ephemeris.skyfield_wrapper.ephemeris
 chime_obs = ephemeris.chime
@@ -281,6 +284,233 @@ def plotSens(rev, LSD, vmin = 0.995, vmax = 1.005):
     title = ('rev 0' + str(rev) + ', LSD ' + str(LSD))
     axis.set_title(title, fontsize=20)
     _ = axis.set_xticks(np.arange(0, 361, 45))
+
+# ========================================================================
+
+def plot_stability(
+    rev, lsd, pol=None, min_dec=0.0, min_nfreq=100, norm_sigma=False, max_val=None,
+    flag_daytime=True, flag_bad_data=True
+):
+    """Plot the variations in source spectra with respect to a template.
+
+    Parameters
+    ----------
+    rev : int
+        Revision of daily processing.
+    lsd : int
+        Local sidereal day.
+    pol : list of str
+        Polarisations.  Default is ["XX", "YY"].
+    min_dec : float
+        Only plot sources with a declination greater than
+        this value in degrees.
+    min_nfreq : float
+        Only plot statistics calculated over frequency axis for sources with
+        more than this number of unflagged frequencies.
+    norm_sigma : bool
+        If true, normalize by the standard deviation over days.
+        If false, normalize by the absolute value of the template.
+    max_val : float
+        The maximum value of the color scale.  If not provided,
+        then default to 3 (sigma) if norm_sigma is true and
+        0.05 (fractional units) if norm_sigma is false.
+    flag_daytime : bool
+        Add a shaded region to the figures that indicates the daytime.
+    flag_bad_data : bool
+        Add a shaded region to the figures that indicates data that is bad
+        according to a flag in the database.
+    """
+
+    if pol is None:
+        pol = ["XX", "YY"]
+
+    if max_val is None:
+        max_val = 3.0 if norm_sigma else 0.05
+
+    # Load the template
+    patht = os.path.join(
+        "/project/rpp-chime/chime/chime_processed/spectra",
+        f"rev_{rev:02}",
+        f"spectra_rev_{rev:02}_bright.h5",
+    )
+
+    template = containers.FormedBeam.from_file(patht)
+
+    # Load the data for this sidereal day
+    path = os.path.join(
+        "/project/rpp-chime/chime/chime_processed/daily",
+        f"rev_{rev:02}",
+        f"{lsd}",
+        f"sourceflux_lsd_{lsd}_bright.h5",
+    )
+
+    data = containers.FormedBeam.from_file(path)
+
+    # Extract axes
+    freq = data.freq
+
+    ipol = np.array([list(data.pol).index(pstr) for pstr in pol])
+    npol = ipol.size
+
+    ra = data["position"]["ra"][:]
+    dec = data["position"]["dec"][:]
+
+    # Only consider sources above some minimum declination
+    valid = np.flatnonzero(dec > min_dec)
+    valid = valid[np.argsort(ra[valid])]
+
+    ra = ra[valid]
+    dec = dec[valid]
+
+    # Flag bad data
+    flag_rfi = ~rfi.frequency_mask(freq, timestamp=ephemeris.csd_to_unix(lsd))
+    flag_time = ~_mask_flags(ephemeris.csd_to_unix(lsd + ra / 360.0), lsd)
+
+    flag = (
+        (data.weight[:] > 0.0)
+        & (template.weight[:] > 0.0)
+        & flag_rfi[np.newaxis, np.newaxis, :]
+    )
+
+    flag = flag[valid][:, ipol] & flag_time[:, np.newaxis, np.newaxis]
+
+    # Calculate sunrise and sunset to indicate daytime data
+    if flag_daytime:
+        ev = events(chime_obs, lsd)
+        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+
+    # Query dataflags
+    if flag_bad_data:
+        bad_time_spans = flag_time_spans(lsd)
+        bad_ra_woverlap = [[(max(chime_obs.unix_to_lsd(bts[1]), lsd) - lsd) * 360,
+                            (min(chime_obs.unix_to_lsd(bts[2]), lsd+1) - lsd) * 360]
+                           for bts in bad_time_spans]
+
+        bad_ra_spans = []
+        for begin, end in sorted(bad_ra_woverlap):
+            if bad_ra_spans and bad_ra_spans[-1][1] >= begin:
+                bad_ra_spans[-1][1] = max(bad_ra_spans[-1][1], end)
+            else:
+                bad_ra_spans.append([begin, end])
+
+    # Calculate the fractional deviation in the source spectra
+    ds = data.beam[:] - template.beam[:]
+
+    if norm_sigma:
+        lbl = r"$(S - S_{med}) \ / \ \sigma_{S}$"
+        norm = np.sqrt(template.weight[:])
+    else:
+        lbl = r"$(S - S_{med}) \ / \ S_{med}$"
+        norm = tools.invert_no_zero(np.abs(template.beam[:]))
+
+    ds *= norm
+
+    ds = ds[valid][:, ipol]
+
+    # Calculate the median absolute fractional deviation over frequency for each source
+    med_abs_ds = weighted_median.weighted_median(
+        np.abs(ds).astype(np.float64), flag.astype(np.float64)
+    )
+
+    nfreq = np.sum(flag, axis=-1)
+    med_abs_ds = np.where(nfreq > min_nfreq, med_abs_ds, np.nan)
+
+    # Define plot parameters
+    ra_grid = np.arange(0.0, 360.0, 1.0)
+    index = _search_nearest(ra, ra_grid)
+
+    extent = (freq[-1], freq[0], ra_grid[0], ra_grid[-1])
+    cmap = plt.get_cmap("coolwarm")
+
+    # Create plot
+    fig = plt.figure(num=1, figsize=(30, 7.5 * npol))
+
+    gspec = matplotlib.gridspec.GridSpec(
+        npol, 2, width_ratios=[1, 5], wspace=0.04, hspace=0.05
+    )
+
+    alpha = 0.25
+    color_bad = "grey"
+    color_day="gold"
+
+    # Loop over the requested polarisations
+    for pp, pstr in enumerate(pol):
+        # Plot the median (over frequency) fractional deviation
+        # as a function of source RA
+        plt.subplot(gspec[pp, 0])
+        plt.plot(
+            med_abs_ds[index, pp], ra_grid, color="k", linestyle="-", marker="None"
+        )
+
+        if flag_daytime:
+            if sr < ss:
+                plt.axhspan(sr, ss, color=color_day, alpha=alpha)
+            else:
+                plt.axhspan(0, ss, color=color_day, alpha=alpha)
+                plt.axhspan(sr, 360, color=color_day, alpha=alpha)
+
+        if flag_bad_data:
+            for brs in bad_ra_spans:
+                plt.axhspan(brs[0], brs[1], color=color_bad, alpha=alpha)
+
+        plt.xlim([0.0, max_val])
+        plt.ylim(ra_grid[0], ra_grid[-1])
+        plt.grid()
+
+        plt.ylabel("RA [deg]")
+        if pp < (npol - 1):
+            plt.gca().axes.get_xaxis().set_ticklabels([])
+        else:
+            plt.xlabel(r"med$_{\nu}(|$" + lbl + r"$|)$")
+
+        plt.text(
+            0.95,
+            0.95,
+            f"Pol {pstr}",
+            color="red",
+            transform=plt.gca().transAxes,
+            verticalalignment="top",
+            horizontalalignment="right",
+        )
+
+        # Create an image of the fractional deviation
+        # as a function of frequency and source RA
+        plt.subplot(gspec[pp, 1])
+        mplot = np.where(flag[index, pp], ds[index, pp], np.nan)
+
+        img = plt.imshow(
+            mplot[:, ::-1],
+            aspect="auto",
+            origin="lower",
+            interpolation="nearest",
+            extent=extent,
+            cmap=cmap,
+            vmin=-max_val,
+            vmax=max_val,
+        )
+
+        cbar = plt.colorbar(img)
+        cbar.set_label(lbl)
+
+        if flag_daytime:
+            if sr < ss:
+                plt.axhspan(sr, ss, color=color_day, alpha=alpha)
+            else:
+                plt.axhspan(0, ss, color=color_day, alpha=alpha)
+                plt.axhspan(sr, 360, color=color_day, alpha=alpha)
+
+        if flag_bad_data:
+            for brs in bad_ra_spans:
+                plt.axhspan(brs[0], brs[1], color=color_bad, alpha=alpha)
+
+        plt.ylim(extent[2], extent[3])
+
+        plt.gca().axes.get_yaxis().set_ticklabels([])
+        if pp < (npol - 1):
+            plt.gca().axes.get_xaxis().set_ticklabels([])
+        else:
+            plt.xlabel("Frequency [MHz]")
 
 #========================================================================
 
