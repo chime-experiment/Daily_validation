@@ -56,7 +56,7 @@ def plotDS(rev, LSD, hpf=False, clim = [1e-3, 1e2], cmap='inferno'):
     DS_Spec = DS.spectrum
     
     baseline_vec = DS.index_map["baseline"] 
-    bl_mask = np.zeros((4, baseline_vec.shape[0]), dtype='bool')
+    bl_mask = np.zeros((4, baseline_vec.shape[0]), dtype=bool)
     bl_mask[0] = baseline_vec[:, 0] < 10
     bl_mask[1] = (baseline_vec[:, 0] > 10) & (baseline_vec[:, 0] < 30)
     bl_mask[2] = (baseline_vec[:, 0] > 30) & (baseline_vec[:, 0] < 50)
@@ -225,7 +225,7 @@ def flag_time_spans(LSD):
 
 
 def _mask_flags(times, LSD):
-    flag_mask = np.zeros_like(times, dtype=np.bool)
+    flag_mask = np.zeros_like(times, dtype=bool)
 
     for type_, ca, cb in flag_time_spans(LSD):
         flag_mask[(times > ca) & (times < cb)] = True
@@ -676,7 +676,7 @@ def plotRM_tempSub(rev, LSD, fi = 400, pi = 3):
         
         flag_mask[(csd_arr > ca) & (csd_arr < cb)] = True
         
-        if (ca > csd + 1) or cb < csd:
+        if (ca > LSD + 1) or cb < LSD:
             continue
 
         if type_ not in flags_by_type:
