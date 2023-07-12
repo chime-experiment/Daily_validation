@@ -28,7 +28,7 @@ template_path = Path("/project/rpp-chime/chime/validation/templates")
 
 _file_spec = {
     "ringmap": ("ringmap_", ".zarr.zip"),
-    "delayspectrum": ("delayspectrum_", "h5"),
+    "delayspectrum": ("delayspectrum_", ".h5"),
     "delayspectrum_hpf": ("delayspectrum_hpf_", ".h5"),
     "sensitivity": ("sensitivity_", ".h5"),
     "rfi_mask": ("rfi_mask_", ".h5"),
@@ -497,7 +497,7 @@ def plot_stability(
 
         plt.ylabel("RA [deg]")
         if pp < (npol - 1):
-            ax.set_ticklabels([])
+            ax.set_xticklabels([])
         else:
             ax.set_xlabel(r"med$_{\nu}(|$" + lbl + r"$|)$")
 
@@ -541,11 +541,11 @@ def plot_stability(
             for brs in bad_ra_spans:
                 ax.axhspan(brs[0], brs[1], color=color_bad, alpha=alpha)
 
-        ax.ylim(extent[2], extent[3])
+        ax.set_ylim(extent[2], extent[3])
 
-        ax.set_ticklabels([])
+        ax.set_yticklabels([])
         if pp < (npol - 1):
-            ax.set_ticklabels([])
+            ax.set_xticklabels([])
         else:
             ax.set_xlabel("Frequency [MHz]")
 
@@ -718,9 +718,6 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
         path_stack, freq_sel=slice(fi, fi + 1), pol_sel=slice(pi, pi + 1)
     )
     rm_stack = rm_stack.map[0, 0, 0]
-    # Need to match the elevations being used. This is very crude. We should actually
-    # just generate a new ringmap with a match elevation axis (Richard)
-    rm_stack = rm_stack[..., ::2]
 
     # NOTE: do a very straightforward template subtraction and destriping
     ra = ringmap.index_map["ra"][:]
@@ -730,7 +727,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     # Calculate events like solar transit, rise ...
     ev = events(chime_obs, LSD)
 
-    fig, axes = plt.subplots(
+    _, axes = plt.subplots(
         2,
         1,
         sharex=True,
