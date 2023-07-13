@@ -16,10 +16,13 @@ workingdir=$(mktemp -d)
 usage() {
     echo "Usage:"
     echo "  run.sh [-r REV] [-b BASEDIR]"
-    echo "    Generate the validation plots for the given REV at BASEDIR."
     echo
-    echo "    BASEDIR should be the path to the revisions."
-    echo "    REV can be a integer revision id, or the string latest (which is the default)."
+    echo "  Generate the validation plots for the given REV at BASEDIR. They will "
+    echo "  be written into the current directory. Only missing or updated will "
+    echo "  be processed."
+    echo
+    echo "  BASEDIR should be the path to the revisions."
+    echo "  REV can be a integer revision id, or the string latest (which is the default)."
 }
 
 revdir () {
@@ -39,7 +42,7 @@ rev="latest"
 base="/project/rpp-chime/chime/chime_processed/daily"
 
 # Process command line options
-while getopts ":h:r:b:" opt; do
+while getopts ":hr:b:" opt; do
     case ${opt} in
         h )
             usage
@@ -59,6 +62,13 @@ while getopts ":h:r:b:" opt; do
     esac
 done
 
+# Check if base dir exists
+if [[ ! -d "${base}" ]]
+then
+    echo "Base directory ${base} does not exist."
+    exit 2
+fi
+
 # Resolve the latest revision if needed
 if [[ "$rev" == "latest" ]]
 then
@@ -66,7 +76,6 @@ then
     rev=$(ls $base | grep rev | sort | tail -n 1 | cut -c 5-)
     printf "Using latest revision rev_%02i\n" $rev
 fi
-
 
 echo "Scanning ${base} for rev_${rev} days to process..."
 
