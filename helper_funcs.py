@@ -495,7 +495,7 @@ def plot_stability(
         ax.set_ylim(ra_grid[0], ra_grid[-1])
         ax.grid()
 
-        plt.ylabel("RA [deg]")
+        ax.set_ylabel("RA [deg]")
         if pp < (npol - 1):
             ax.set_xticklabels([])
         else:
@@ -506,7 +506,7 @@ def plot_stability(
             0.95,
             f"Pol {pstr}",
             color="red",
-            transform=plt.gca().transAxes,
+            transform=ax.transAxes,
             verticalalignment="top",
             horizontalalignment="right",
         )
