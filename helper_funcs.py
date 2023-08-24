@@ -5,8 +5,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from path import Path
+from pathlib import Path
 from skyfield import almanac
+
+from datetime import datetime
 
 from caput import weighted_median
 from caput import time as ctime
@@ -45,7 +47,47 @@ def _get_rev_path(type_: str, rev: int, lsd: int) -> Path:
     return base_path / f"rev_{rev:02d}" / f"{lsd:d}" / f"{prefix}lsd_{lsd:d}{suffix}"
 
 
+def get_csd(day: int | str = None, num_days: int = 0) -> int:
+    """Get a csd from an integer or a string with format yyyy/mm/dd.
+
+    If None, return the current CSD.
+    """
+    if day is None:
+        return int(ephemeris.chime.get_current_lsd() - num_days)
+
+    if isinstance(day, str):
+        day = datetime.strptime(day, "%Y/%m/%d").timestamp()
+        return int(ephemeris.unix_to_csd(day))
+
+    return int(day)
+
+
 # ==========================================================================
+
+
+def _mask_baselines(baseline_vec, single_mask=False):
+    """Mask long baselines in a delay spectrum."""
+
+    bl_mask = np.zeros((4, baseline_vec.shape[0]), dtype=bool)
+    bl_mask[0] = baseline_vec[:, 0] < 10
+    bl_mask[1] = (baseline_vec[:, 0] > 10) & (baseline_vec[:, 0] < 30)
+    bl_mask[2] = (baseline_vec[:, 0] > 30) & (baseline_vec[:, 0] < 50)
+    bl_mask[3] = baseline_vec[:, 0] > 50
+
+    if single_mask:
+        bl_mask = np.any(bl_mask, axis=0)
+
+    return bl_mask
+
+
+def _hide_axis(ax):
+    """Hide axis ticks and frame without removing axis."""
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(left=False, bottom=False)
 
 
 def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
@@ -60,7 +102,8 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
           Day number
     hpf : bool, optional (default False)
           with/without high pass filter (True/False)
-    vmin, vmax : min, max values in the colorscale, optional
+    clim : list, optional (default [1e-3, 1e2])
+        min, max values in the colorscale
     cmap : colormap, optional (default 'inferno')
 
     Returns
@@ -77,11 +120,7 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
     DS_Spec = DS.spectrum
 
     baseline_vec = DS.index_map["baseline"]
-    bl_mask = np.zeros((4, baseline_vec.shape[0]), dtype=bool)
-    bl_mask[0] = baseline_vec[:, 0] < 10
-    bl_mask[1] = (baseline_vec[:, 0] > 10) & (baseline_vec[:, 0] < 30)
-    bl_mask[2] = (baseline_vec[:, 0] > 30) & (baseline_vec[:, 0] < 50)
-    bl_mask[3] = baseline_vec[:, 0] > 50
+    bl_mask = _mask_baselines(baseline_vec)
 
     fig, ax = plt.subplots(
         1, 4, figsize=(15, 8), sharey=True, gridspec_kw={"width_ratios": [1, 2, 2, 2]}
@@ -115,13 +154,165 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
     # ax[0].set_ylabel("Delay [ns]")
     fig.supxlabel("NS baseline length [m]", fontsize=20)
     fig.supylabel("Delay [ns]", fontsize=20)
-    title = "rev 0" + str(rev) + ", LSD " + str(LSD) + ", hpf = " + str(hpf)
+    title = "rev 0" + str(rev) + ", CSD " + str(LSD) + ", hpf = " + str(hpf)
     fig.suptitle(title, fontsize=20)
     fig.subplots_adjust(wspace=0.05)
-    fig.colorbar(im, ax=ax, orientation="vertical", pad=0.02, aspect=40)
+    fig.colorbar(
+        im, ax=ax, orientation="vertical", label="Signal Power", pad=0.02, aspect=40
+    )
 
     del DS
     pass
+
+
+def plotMultipleDS(
+    rev,
+    csd_start,
+    num_days,
+    view="grid",
+    reverse=True,
+    hpf=False,
+    clim=[1e-3, 1e2],
+    cmap="inferno",
+):
+    """Plot multiple delay spectra in a given range.
+
+    Parameters
+    ----------
+    rev : int
+        Revision number
+    csd_start : int
+        First csd in the range
+    num_days : int
+        Number of days to plot, starting at `csd_start`
+    view : str, optional (default "grid")
+        How to display the plots. If `grid`, delay spectra are shown
+        on a dense nx3 grid. If `list`, delay spectra are plotted one
+        at a time using the plotting format in `plotDS`
+    reverse : bool, optional (default True)
+        If true, display days in decreasing order
+    hpf : bool, optional (default False)
+          with/without high pass filter (True/False)
+    clim : list, optional (default [1e-3, 1e2])
+        min, max values in the colorscale
+    cmap : colormap, optional (default 'inferno')
+    """
+
+    if num_days < 1:
+        # Why would we want this
+        print("No days requested")
+        return
+
+    if view not in {"list", "grid"}:
+        print("Invalid value for kwarg `view`. Using default `grid`")
+        view = "grid"
+
+    # Accumulate the number of days available
+    count = 0
+    csds = list(range(csd_start, csd_start + num_days))
+    if reverse:
+        csds = csds[::-1]
+
+    if view == "list":
+        for csd in csds:
+            try:
+                plotDS(rev, csd, hpf, clim, cmap)
+            except FileNotFoundError:
+                count += 1
+
+        print(f"Data products found for {num_days - count}/{num_days} days.")
+
+        return
+
+    type_ = "delayspectrum_hpf" if hpf else "delayspectrum"
+
+    # Sort out the grid shape
+    if not bool(num_days % 2):
+        # Day number is divisible by 2
+        plt_shape_ = (num_days // 2, 2)
+    else:
+        # Otherwise use a 3x3 grid
+        extra_row = int(bool(num_days % 3))
+        plt_shape_ = (num_days // 3 + extra_row, 3)
+
+    # Set up a grid
+    extra_row = int(num_days % 3 != 0)
+    fig, ax = plt.subplots(
+        *plt_shape_,
+        figsize=(30, 10 * int(num_days // 3 + extra_row)),
+        sharey=True,
+        sharex=True,
+        layout="constrained",
+    )
+    # The is for consistency of indexing axes
+    ax = np.atleast_2d(ax)
+    # If no data is plotted, we probably shouldn't display anything
+    im = None
+    imshow_params = {
+        "origin": "lower",
+        "aspect": "auto",
+        "interpolation": "nearest",
+        "norm": LogNorm(),
+        "clim": clim,
+        "cmap": cmap,
+    }
+
+    for i, csd in enumerate(csds):
+        ax_row = i // plt_shape_[0]
+        ax_col = i % plt_shape_[0]
+
+        path = _get_rev_path(type_, rev, csd)
+
+        try:
+            DS = containers.DelaySpectrum.from_file(path)
+        except FileNotFoundError:
+            # Hide this axis, but don't actually disable it
+            _hide_axis(ax[ax_row, ax_col])
+            # grey out this subplot
+            ax[ax_row, ax_col].set_facecolor("#686868")
+            count += 1
+            continue
+
+        # Get the axis extent and any masking
+        tau = DS.index_map["delay"] * 1e3
+        baseline_vec = DS.index_map["baseline"]
+        bl_mask = _mask_baselines(baseline_vec, single_mask=True)
+        bl_mask = np.tile(bl_mask, (len(tau), 1))
+
+        extent = [0, baseline_vec.shape[0], tau[0], tau[-1]]
+
+        im = ax[ax_row, ax_col].imshow(
+            np.ma.masked_array(DS.spectrum[:].T.real, mask=~bl_mask.T),
+            extent=extent,
+            **imshow_params,
+        )
+        date = ephemeris.csd_to_unix(int(csd))
+        date = datetime.utcfromtimestamp(date).strftime("%Y-%m-%d")
+        ax[ax_row, ax_col].set_title(f"{csd} ({date})")
+
+    if im is None:
+        # We never actually plotted any data
+        print("No data available in this range")
+        del fig
+        return
+
+    fig.colorbar(im, ax=ax, location="top", aspect=40, pad=0.01)
+    fig.supxlabel("NS baseline", fontsize=40)
+    fig.supylabel("Delay [ns]", fontsize=40)
+    title = f"Signal Power - rev {rev:02d}, CSD range {csd_start}-{csd_start+num_days-1}, hpf = {hpf}"
+    fig.suptitle(title, fontsize=40)
+
+    # Remove the extra unused subplots
+    for i in range(ax.size - num_days):
+        _hide_axis(ax[-1, -i - 1])
+
+    # set the axis labelsize everywhere
+    for _ax in ax.flatten():
+        _ax.xaxis.set_tick_params(labelsize=18)
+        _ax.yaxis.set_tick_params(labelsize=18)
+
+    del DS
+    print(f"Data products found for {num_days - count}/{num_days} days.")
 
 
 # ========================================================================
