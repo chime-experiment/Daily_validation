@@ -3,7 +3,8 @@
 
 scriptdir=$(dirname -- "${BASH_SOURCE[0]}")
 scriptdir="$( realpath -e -- "$scriptdir"; )"
-notebook="${scriptdir}/daily_validation.ipynb"
+daily_notebook="${scriptdir}/daily_validation.ipynb"
+weekly_notebook="${scriptdir}/weekly_validation.ipynb"
 
 # Set the pythonpath so that helper_funcs can be found
 export PYTHONPATH="${scriptdir}:${PYTHONPATH}"
@@ -29,17 +30,25 @@ revdir () {
     printf "${base}/rev_%02i" $1
 }
 
+optdir () {
+    printf "${outputdir}/rev_%02i" $1
+}
+
 htmlfile () {
     echo "rev${rev}_${1}.html"
 }
 
-nbfile () {
+dnbfile () {
     echo "${workingdir}/rev${rev}_${1}.ipynb"
 }
 
+wnbfile () {
+    echo "${workingdir}/rev${rev}_14day.ipynb"
+}
 
 rev="latest"
 base="/project/rpp-chime/chime/chime_processed/daily"
+outputdir="/project/rpp-chime/chime/validation"
 
 # Process command line options
 while getopts ":hr:b:" opt; do
@@ -66,6 +75,13 @@ done
 if [[ ! -d "${base}" ]]
 then
     echo "Base directory ${base} does not exist."
+    exit 2
+fi
+
+# Check if output dir exists
+if [[ ! -d "${outputdir}" ]]
+then
+    echo "Output directory ${outputdir} does not exist."
     exit 2
 fi
 
@@ -100,8 +116,17 @@ do
     printf "[%4i of %i] processing CSD=%i \n" $i ${#days_to_process[@]} $csd
 
     printf "  Executing notebook.\n"
-    papermill ${notebook} $(nbfile $csd) -p LSD ${csd} -p rev_id 7 -k mlchime \
+    papermill ${daily_notebook} $(dnbfile $csd) -p LSD ${csd} -p rev_id 7 -k mlchime \
         --report-mode --no-log-output --no-progress-bar
     printf "  Converting notebook to html.\n"
-    jupyter nbconvert --to html --no-input --output-dir=. $(nbfile $csd)
+    jupyter nbconvert --to html --no-input --output-dir=$(optdir $rev) $(dnbfile $csd)
+    rm $(dnbfile $csd)
 done
+
+# Update the 14-day notebook as well
+printf "Processing grid of recent days.\n"
+papermill ${weekly_notebook} $(wnbfile) -p rev_id ${rev} -k mlchime --report-mode \
+    --no-log-output --no-progress-bar
+printf " Converting notebook to html.\n"
+jupyter nbconvert --to html --no-input --output-dir=$(optdir $rev) $(wnbfile)
+rm $(wnbfile)
