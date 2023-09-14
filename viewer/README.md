@@ -15,7 +15,7 @@
 ```
     WSGIApplicationGroup %{GLOBAL}
     WSGIScriptAlias /daily/view /var/local/daily_viewer/viewer.wsgi
-    RedirectMatch ^/daily/$ /daily_viewer/view
+    RedirectMatch ^/daily/$ /daily/view
 ```
 
 4. Enable WSGI module:
