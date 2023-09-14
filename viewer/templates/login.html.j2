@@ -1,0 +1,10 @@
+{% extends "base.html.j2" %}
+{% block title %}Login required{% endblock %}
+{% block ui %}<H2>Please Log In</H2>
+<form method="POST" action="/daily/view"><input type="hidden" name="csd" value="{{ csd }}"/>
+<label for="user_name" class="login">Username:</label> <input type="text" name="user_name"/>
+<br/>
+<label for="user_password" class="login">Password:</label> <input type="password" name="user_password"/>
+<br/><input type="submit" value="Log in">
+</form>{% endblock %}
+{% block iframesrc %}blurry.html{% endblock %}
