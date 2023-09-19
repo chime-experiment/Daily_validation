@@ -1,0 +1,92 @@
+body {
+  background: black;
+  color: white;
+  margin: 0;
+}
+
+div.ui {
+  height: 300px;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background: black;
+}
+
+iframe {
+  margin-top: 300px;
+  width: 100%;
+  height: 100vh;
+}
+
+div.logout {
+  color: #77F;
+  float: right;
+  margin-right: 1em;
+}
+
+div.csd {
+  float: left;
+  width: 40%;
+  height: 200px;
+}
+
+div.flash {
+  border: 1px solid;
+  padding: 1em;
+  width: 50%;
+  margin-left: 25%;
+  margin-top: 10px;
+  margin-right: 25%;
+  margin-bottom: 10px;
+}
+
+div.flash-empty {
+  color: black;
+  background: black;
+}
+
+div.flash-info {
+  background: #007;
+  color: #77F;
+}
+
+div.flash-warning {
+  background: #770;
+  color: #FF7;
+}
+
+div.flash-good {
+  background: #070;
+  color: #7F7;
+}
+
+div.flash-error {
+  background: #700;
+  color: #F77;
+}
+
+label.login {
+  width: 8em;
+  display: inline-block;
+}
+
+h2 {
+  margin-top: 0;
+}
+
+div.csd-selector > button {
+  height: 40px;
+  width: 40px;
+  margin: 0;
+  padding: 0;
+}
+
+div.csd-selector > input {
+  width: 80px;
+  height: 36px;
+  font-size: x-large;
+  padding: 0;
+}
