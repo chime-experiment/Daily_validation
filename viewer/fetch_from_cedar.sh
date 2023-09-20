@@ -7,7 +7,7 @@ SOURCEUSER=dvw
 SOURCEID=/root/.ssh/id_cedar_shared
 SOURCEHOST=cedar.computecanada.ca
 SOURCEDIR=/project/rpp-chime/chime/validation/rev_$REV
-SOURCEGLOB="rev${REV}_[0-9][0-9][0-9][0-9].html"
+SOURCEGLOB="rev${REV}_*.html"
 
 DESTBASE=/mnt/md1/daily
 DESTDIR=${DESTBASE}/rendered/
