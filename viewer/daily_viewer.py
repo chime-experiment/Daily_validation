@@ -224,7 +224,10 @@ def get_query(environ):
         return False, 405
 
     # Parse
-    encoded_query = urllib.parse.parse_qs(query_string)
+    try:
+        encoded_query = urllib.parse.parse_qs(query_string)
+    except UnicodeEncodeError:
+        encoded_query = dict()
 
     # Decode
     query = dict()
