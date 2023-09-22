@@ -1,5 +1,9 @@
 function daily_logout(how) { window.location.href = '/daily/view?logout=' + how + '&csd=' + csd }
 
+function fortnight(how) { window.location.href = '/daily/view?fortnight=' + how + '&csd=' + csd }
+
+function show_day(show_csd) { window.location.href = '/daily/view?csd=' + show_csd }
+
 function set_disable(id, disable) {
   elem = document.getElementById(id)
   if (disable) {

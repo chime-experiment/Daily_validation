@@ -571,11 +571,13 @@ def get_response(environ):
     # Check for login
     user = get_user(environ)
     if not user:
-        # If this is a fetch or opinion push, just return 403 and invalidate the session
+        # If this is a fetch or opinion push, just return 403 and invalidate
+        # the session
         if "fetch" in query or "decision" in query:
             return 403, [INVALIDATE_SESSION]
 
-        # Returns (True, user) on successful login, or the 4-tuple response on failure
+        # Returns (True, user) on successful login, or the 4-tuple response
+        # on failure
         result = do_login(query)
 
         # Check for login success
@@ -597,6 +599,10 @@ def get_response(environ):
             return redirect_response(environ, headers)
 
     # If we get here, we're logged in, and both user and query are valid.
+    if "fortnight" in query:
+        # Render the 2-week view
+        return render_template("fortnight", data={'csd': query.get("csd", 0)},
+             headers=headers)
     if "fetch" in query:
         # Returns an HTML file from the render_dir
         try:

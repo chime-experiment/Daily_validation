@@ -13,7 +13,10 @@ var opinions = {{ opinions }};
 </script>
 {% endblock %}
 {% block ui %}
-<div class="logout"><button onclick="daily_logout('{{ logout }}')">Logout</button></div>
+<div class="logout">
+<button onclick="fortnight('{{ logout }}')">2-week grid</button>
+<button onclick="daily_logout('{{ logout }}')">Logout</button>
+</div>
 <div class="csd">
 <H2>Choose CSD:</H2>
 <div class="csd-selector">
