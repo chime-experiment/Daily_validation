@@ -100,7 +100,7 @@ days_to_process=()
 for f in $(revdir $rev)/*/delayspectrum_hpf*.h5
 do
     csd=$(basename $(dirname $f))
-    outfile=$(htmlfile $csd)
+    outfile=$(optdir $rev)/$(htmlfile $csd)
 
     if [[ ! -f "${outfile}" ]] || [[ "${outfile}" -ot "${f}" ]]
     then
@@ -116,7 +116,7 @@ do
     printf "[%4i of %i] processing CSD=%i \n" $i ${#days_to_process[@]} $csd
 
     printf "  Executing notebook.\n"
-    papermill ${daily_notebook} $(dnbfile $csd) -p LSD ${csd} -p rev_id 7 -k mlchime \
+    papermill ${daily_notebook} $(dnbfile $csd) -p LSD ${csd} -p rev_id 7 -k python3 \
         --report-mode --no-log-output --no-progress-bar
     printf "  Converting notebook to html.\n"
     jupyter nbconvert --to html --no-input --output-dir=$(optdir $rev) $(dnbfile $csd)
@@ -125,7 +125,7 @@ done
 
 # Update the 14-day notebook as well
 printf "Processing grid of recent days.\n"
-papermill ${weekly_notebook} $(wnbfile) -p rev_id ${rev} -k mlchime --report-mode \
+papermill ${weekly_notebook} $(wnbfile) -p rev_id ${rev} -k python3 --report-mode \
     --no-log-output --no-progress-bar
 printf " Converting notebook to html.\n"
 jupyter nbconvert --to html --no-input --output-dir=$(optdir $rev) $(wnbfile)
