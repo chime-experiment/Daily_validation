@@ -239,7 +239,7 @@ def plotMultipleDS(
     extra_row = int(num_days % 3 != 0)
     fig, ax = plt.subplots(
         *plt_shape_,
-        figsize=(30, 10 * int(num_days // 3 + extra_row)),
+        figsize=(int(10 * plt_shape_[1]), int(10 * plt_shape_[0])),
         sharey=True,
         sharex=True,
         layout="constrained",
@@ -258,8 +258,8 @@ def plotMultipleDS(
     }
 
     for i, csd in enumerate(csds):
-        ax_row = i // plt_shape_[0]
-        ax_col = i % plt_shape_[0]
+        ax_row = i // plt_shape_[1]
+        ax_col = i % plt_shape_[1]
 
         path = _get_rev_path(type_, rev, csd)
 
