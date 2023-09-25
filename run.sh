@@ -43,7 +43,7 @@ dnbfile () {
 }
 
 wnbfile () {
-    echo "${workingdir}/rev${rev}_14day.ipynb"
+    echo "${workingdir}/rev${rev}_14days.ipynb"
 }
 
 rev="latest"
