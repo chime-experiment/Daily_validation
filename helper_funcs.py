@@ -47,13 +47,13 @@ def _get_rev_path(type_: str, rev: int, lsd: int) -> Path:
     return base_path / f"rev_{rev:02d}" / f"{lsd:d}" / f"{prefix}lsd_{lsd:d}{suffix}"
 
 
-def get_csd(day: int | str = None, num_days: int = 0) -> int:
+def get_csd(day: int | str = None, num_days: int = 0, lag: int = 0) -> int:
     """Get a csd from an integer or a string with format yyyy/mm/dd.
 
     If None, return the current CSD.
     """
     if day is None:
-        return int(ephemeris.chime.get_current_lsd() - num_days)
+        return int(ephemeris.chime.get_current_lsd() - num_days - lag)
 
     if isinstance(day, str):
         day = datetime.strptime(day, "%Y/%m/%d").timestamp()
