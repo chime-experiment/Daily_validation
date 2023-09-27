@@ -7,7 +7,7 @@
     <TITLE>CHIME daily viewer - {% block title %}BASE TITLE{% endblock %}</TITLE>{% block headmatter %}{% endblock %}
   </HEAD>
   <BODY>
-    <div class="ui">{% if flash is defined %}<div id="flash" class="flash flash-{{ flash_type | d('info') }}">{{ flash }}{% else %}<div id="flash" class="flash flash-empty">&nbsp;{% endif %}</div>{% block ui %}BASE UI{% endblock %}</div>
-      <IFRAME id="frame" src="/daily/{% block iframesrc %}MISSING{% endblock %}"></IFRAME>
+    <div class="ui {{ ui_class | d('') }}">{% if flash is defined %}<div id="flash" class="flash flash-{{ flash_type | d('info') }}">{{ flash }}{% else %}<div id="flash" class="flash flash-empty">&nbsp;{% endif %}</div>{% block ui %}BASE UI{% endblock %}</div>
+      <IFRAME class="ui {{ ui_class | d('') }}" id="frame" src="/daily/{% block iframesrc %}MISSING{% endblock %}"></IFRAME>
   </BODY>
 </HTML>

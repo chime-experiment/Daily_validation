@@ -227,6 +227,7 @@ def get_query(environ):
     try:
         encoded_query = urllib.parse.parse_qs(query_string)
     except UnicodeEncodeError:
+        print(f"Unicode Encoding Error: {query_string}", file=sys.stderr)
         encoded_query = dict()
 
     # Decode
@@ -287,7 +288,9 @@ def get_csds(user, revision):
         except ValueError:
             # Ignore non-numeric values
             pass
-    print(f"daily_viewer: {len(csds)} pages in render_dir={render_dir}", file=sys.stderr)
+    print(
+        f"daily_viewer: {len(csds)} pages in render_dir={render_dir}", file=sys.stderr
+    )
 
     set_globals()
     rev = DataRevision.get(name=f"rev_{_REVISION:02}")
@@ -499,14 +502,18 @@ def update_opinion(user, query):
         else:
             result["notes"] = ""
 
-        query = DataFlagOpinion.update(
-            decision=decision, notes=notes, last_edit=now, client=CLIENT
-        ).where(
-            DataFlagOpinion.user == user,
-            DataFlagOpinion.revision == rev,
-            DataFlagOpinion.type == OPINION_TYPE,
-            DataFlagOpinion.lsd == csd,
-        ).limit(1)
+        query = (
+            DataFlagOpinion.update(
+                decision=decision, notes=notes, last_edit=now, client=CLIENT
+            )
+            .where(
+                DataFlagOpinion.user == user,
+                DataFlagOpinion.revision == rev,
+                DataFlagOpinion.type == OPINION_TYPE,
+                DataFlagOpinion.lsd == csd,
+            )
+            .limit(1)
+        )
         print(query.sql(), file=sys.stderr)
         count = query.execute()
         if count == 0:
@@ -604,8 +611,11 @@ def get_response(environ):
     # If we get here, we're logged in, and both user and query are valid.
     if "fortnight" in query:
         # Render the 2-week view
-        return render_template("fortnight", data={'csd': query.get("csd", 0)},
-             headers=headers)
+        return render_template(
+            "fortnight",
+            data={"csd": query.get("csd", 0), "ui_class": "ui_2week"},
+            headers=headers,
+        )
     if "fetch" in query:
         # Returns an HTML file from the render_dir
         try:
