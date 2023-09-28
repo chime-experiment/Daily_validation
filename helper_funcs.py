@@ -90,7 +90,7 @@ def _hide_axis(ax):
     ax.tick_params(left=False, bottom=False)
 
 
-def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
+def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno", dynamic_clim=False):
     """
     Plots the delay spectrum for a given LSD.
 
@@ -118,6 +118,14 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
 
     tau = DS.index_map["delay"] * 1e3
     DS_Spec = DS.spectrum
+
+    if dynamic_clim:
+        # Order of magnitude of the mean of the 2 cyl sep high-delay region
+        # This is fairly arbitrary and not very robust, so it should be
+        # improved
+        spec_m = np.floor(np.log10(np.median(DS_Spec)))
+        delta = np.floor(np.log10(clim[0])) - spec_m
+        clim[1] = 10 ** (np.floor(np.log10(clim[1])) - delta)
 
     baseline_vec = DS.index_map["baseline"]
     bl_mask = _mask_baselines(baseline_vec)
