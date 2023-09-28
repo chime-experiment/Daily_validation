@@ -918,11 +918,11 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     # Calculate events like solar transit, rise ...
     ev = events(chime_obs, LSD)
 
-    _, axes = plt.subplots(
+    fig, axes = plt.subplots(
         2,
         1,
         sharex=True,
-        figsize=(14, 13),
+        figsize=(14, 18),
         gridspec_kw=dict(height_ratios=[1, 10], hspace=0.0),
     )
 
@@ -934,7 +934,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
         axes[0].fill_between(
             ra, ii, ii + 1, where=series, label=type_, color=f"C{ii}", alpha=0.5
         )
-    axes[0].legend()
+
     axes[0].set_yticks([])
     axes[0].set_ylim(0, ii + 1)
 
@@ -980,3 +980,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     # Give the overall plot a title identifying the CSD
     title = "rev 0" + str(rev) + ", LSD " + str(LSD) + f", {freq[0]:.2f}" + " MHz"
     axes[0].set_title(title, fontsize=fontsize)
+
+    # Add the legend
+    h1, l1 = axes[0].get_legend_handles_labels()
+    fig.legend(h1, l1, loc=1)
