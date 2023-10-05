@@ -38,6 +38,8 @@ function update_ui(opinion) {
 
   // Load new render
   document.getElementById("frame").src = script_name + "?fetch=rev07_" + csd
+  // Update the vote count
+  document.getElementById("opinion-count").innerHTML = opinion[3] + " existing votes"
 
   // Enable/disable buttons
   set_disable("button_first", csd == first_csd)
@@ -219,12 +221,15 @@ function submit_opinion() {
         if (index != -1) {
           opinions[index][0] = result.decision
           opinions[index][1] = result.notes
+          opinions[index][3] = result.opinion_count
           console.log("opinion: " + opinions[index])
         }
       }
 
       // Report result
       set_flash(result.result, result.message)
+      // Update the total vote count
+      document.getElementById("opinion-count").innerHTML = result.opinion_count + " existing votes"
     }
   })
   xhr.addEventListener("error", (event) => {

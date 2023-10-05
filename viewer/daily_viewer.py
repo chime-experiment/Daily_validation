@@ -276,17 +276,19 @@ def get_query(environ):
     return True, query
 
 
-def render_opinion_json(csds):
+def render_opinion_json(csds, counts):
     """Convert the list returned by get_csds, into JSON."""
 
     pre_json = list()
 
     for day in reversed(sorted(csds.keys())):
         if csds[day] is None:
-            pre_json.append(["none", "", 0])
+            pre_json.append(["none", "", 0, counts[day]])
         else:
             notes = "" if csds[day].notes is None else csds[day].notes
-            pre_json.append([csds[day].decision, notes, csds[day].last_edit])
+            pre_json.append(
+                [csds[day].decision, notes, csds[day].last_edit, counts[day]]
+            )
 
     return json.dumps(pre_json)
 
@@ -296,10 +298,14 @@ def get_csds(user, revision):
 
     # First get a list of available renders
     csds = dict()
+    counts = {}
     for path in glob.iglob(f"rev{revision:02d}_????.html", root_dir=render_dir):
         try:
             # None as a value here indicates no opinion for this user for this day
-            csds[int(path[-9:-5])] = None
+            id_ = int(path[-9:-5])
+            csds[id_] = None
+            # Record the total number of votes for this day as well
+            counts[id_] = 0
         except ValueError:
             # Ignore non-numeric values
             pass
@@ -314,17 +320,18 @@ def get_csds(user, revision):
     query = DataFlagOpinion.select().where(
         DataFlagOpinion.type == OPINION_TYPE,
         DataFlagOpinion.revision == revision,
-        DataFlagOpinion.user == user,
         DataFlagOpinion.lsd << list(csds.keys()),
     )
 
     for opinion in query.execute():
-        csds[opinion.lsd] = opinion
+        counts[opinion.lsd] += 1
+        if opinion.user == user:
+            csds[opinion.lsd] = opinion
 
-    return csds
+    return csds, counts
 
 
-def csd_vars(query, csds):
+def csd_vars(query, csds, opinion_counts):
     """Determine which CSD to display on first load of the viewer.
 
     If one was specified in the request, that one will be used, if possible.
@@ -416,6 +423,9 @@ def csd_vars(query, csds):
     else:
         selections["csd_decision"] = csds[csd].decision
         selections["csd_notes"] = "" if csds[csd].notes is None else csds[csd].notes
+
+    # Include the number of existing votes for this CSD
+    selections["opinion_count"] = opinion_counts[csd]
 
     return selections
 
@@ -552,6 +562,16 @@ def update_opinion(user, query):
             result["result"] = "good"
             result["message"] = "Opinion Updated"
 
+    result["opinion_count"] = (
+        DataFlagOpinion.select()
+        .where(
+            DataFlagOpinion.revision == rev,
+            DataFlagOpinion.type == OPINION_TYPE,
+            DataFlagOpinion.lsd == csd,
+        )
+        .count()
+    )
+
     # Done, return JSON in all cases
     return 200, list(), "application/json", json.dumps(result)
 
@@ -655,11 +675,11 @@ def get_response(environ):
         return update_opinion(user, query)
 
     # Available days with opinions (if any)
-    csds = get_csds(user, _REVISION)
-    data["opinions"] = render_opinion_json(csds)
+    csds, opinion_counts = get_csds(user, _REVISION)
+    data["opinions"] = render_opinion_json(csds, opinion_counts)
 
     # Choose the first CSD to display on page load
-    data.update(csd_vars(query, csds))
+    data.update(csd_vars(query, csds, opinion_counts))
 
     # Logout
     data["logout"] = random.choice(
