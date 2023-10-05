@@ -32,6 +32,7 @@ var opinions = {{ opinions }};
 <div class="vote">
 <H2 id="opinion-h2">Opinion for CSD #{{ csd }}</H2>
 <button type="Submit" onclick="submit_opinion()">Submit</button>
+<span id="opinion-count">{{ opinion_count }} existing votes</span>
 <div class="opinion-select">
 <input type="radio" id="opinion-none" name="opinion" onclick="set_disable('opinion-notes', true)" value="none"{% if csd_decision == "none" %} checked{% endif %}><label for="opinion-none">None</label>
 <input type="radio" id="opinion-bad" name="opinion" onclick="set_disable('opinion-notes', false)" value="bad"{% if csd_decision == "bad" %} checked{% endif %}><label for="opinion-bad">Bad</label>
