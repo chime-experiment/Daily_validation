@@ -38,6 +38,9 @@ template_dir = pathlib.Path(__file__).with_name("templates")
 web_dir = pathlib.Path(__file__).with_name("web")
 render_dir = pathlib.Path(__file__).with_name("rendered")
 
+# Our URL path
+script_name = ""
+
 # Set up Jinja2
 jinja_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(template_dir), autoescape=jinja2.select_autoescape()
@@ -58,6 +61,10 @@ def set_globals():
 
 def render_template(name, data, headers=None):
     """Render a Jinja2 template `name` using `data`."""
+
+    # These are always part of the data
+    data["script_name"] = script_name
+    data["base_path"] = str(pathlib.Path(script_name).parent)
 
     template = jinja_env.get_template(name + ".html.j2")
     return 200, headers, "text/html", template.render(**data)
@@ -157,6 +164,9 @@ def do_login(query):
     # Remember csd, if given
     csd = query.get("csd", 0)
 
+    # Are we in two-week mode?
+    fortnight = ("fortnight" in query)
+
     if "user_name" in query and "user_password" in query:
         # Try to log in.  `success`
         success, result = check_login(query)
@@ -172,10 +182,15 @@ def do_login(query):
         flash = "Login required."
         flash_type = "info"
 
+    # Data
+    data={"csd": csd, "flash": flash, "flash_type": flash_type}
+    if fortnight:
+        data["fortnight"]="yes"
+
     # Invalidate the cookie and show the login page
     return render_template(
         "login",
-        data={"csd": csd, "flash": flash, "flash_type": flash_type, "csd": csd},
+        data=data,
         headers=[INVALIDATE_SESSION],
     )
 
@@ -569,11 +584,19 @@ def get_response(environ):
         # Logout
         headers.append(INVALIDATE_SESSION)
 
-        # Redirect back to self, maybe with a CSD
+        # New query for the redirect
+        new_query = dict()
         if "csd" in query and query["csd"]:
-            return redirect_response(environ, headers, csd=query["csd"])
-        else:
-            return redirect_response(environ, headers)
+            new_query["csd"] = query["csd"]
+        if "fortnight" in query:
+            new_query["fortnight"] = "yes"
+
+        # Redirect back to self, maybe with a CSD
+        return redirect_response(environ, headers, **new_query)
+
+    # Script name
+    global script_name
+    script_name = environ.get("SCRIPT_NAME")
 
     # Connect to DB
     db.connect(read_write=True)
@@ -600,13 +623,17 @@ def get_response(environ):
         # result[2] is the set-cookie header
         headers.append(result[2])
 
+        # New query for the redirect
+        new_query = dict()
+        if "csd" in query and query["csd"]:
+            new_query["csd"] = query["csd"]
+        if "fortnight" in query:
+            new_query["fortnight"] = "yes"
+
         # Perform a redirect to cleanse the request of login details.
         # This also allows us to verify that the client has correctly set
         # the session cookie
-        if "csd" in query and query["csd"]:
-            return redirect_response(environ, headers, csd=query["csd"])
-        else:
-            return redirect_response(environ, headers)
+        return redirect_response(environ, headers, **new_query)
 
     # If we get here, we're logged in, and both user and query are valid.
     if "fortnight" in query:

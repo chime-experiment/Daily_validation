@@ -1,8 +1,10 @@
-function daily_logout(how) { location.assign('/daily/view?logout=' + how + '&csd=' + csd) }
+function daily_logout(how) { location.assign(script_name + '?logout=' + how + '&csd=' + csd) }
 
-function fortnight(how) { location.assign('/daily/view?fortnight=' + how + '&csd=' + csd) }
+function fortnight(how) { location.assign(script_name + '?fortnight=' + how + '&csd=' + csd) }
 
-function show_day(show_csd) { location.assign('/daily/view?csd=' + show_csd) }
+function fortnight_logout() { location.assign(script_name + '?logout=please&fortnight=yes') }
+
+function show_day(show_csd) { location.assign(script_name + '?csd=' + show_csd) }
 
 function set_disable(id, disable) {
   elem = document.getElementById(id)
@@ -29,13 +31,13 @@ function update_ui(opinion) {
 
   // Update the document
   document.title = "CHIME daily viewer - CSD " + csd
-  window.history.pushState(document.getElementById("root").innerHTML, "", "/daily/view?csd=" + csd)
+  window.history.pushState(document.getElementById("root").innerHTML, "", script_name + "?csd=" + csd)
 
   // Clear flash
   clear_flash()
 
   // Load new render
-  document.getElementById("frame").src = "/daily/view?fetch=rev07_" + csd
+  document.getElementById("frame").src = script_name + "?fetch=rev07_" + csd
 
   // Enable/disable buttons
   set_disable("button_first", csd == first_csd)
@@ -230,7 +232,7 @@ function submit_opinion() {
   })
 
   // POST data
-  xhr.open("POST", "/daily/view")
+  xhr.open("POST", script_name)
   xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
   xhr.send(post_data)
 }
