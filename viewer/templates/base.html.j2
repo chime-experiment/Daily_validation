@@ -2,12 +2,13 @@
 <HTML id="root">
   <HEAD>
     <META charset="utf-8" />
-    <LINK rel="stylesheet" type="text/css" href="/daily/daily.css" />
-    <SCRIPT type="text/javascript" src="/daily/daily.js"></SCRIPT>
-    <TITLE>CHIME daily viewer - {% block title %}BASE TITLE{% endblock %}</TITLE>{% block headmatter %}{% endblock %}
+    <LINK rel="stylesheet" type="text/css" href="{{ base_path }}/daily.css" />
+    <SCRIPT type="text/javascript" src="{{ base_path }}/daily.js"></SCRIPT>
+    <TITLE>CHIME daily viewer - {% block title %}BASE TITLE{% endblock %}</TITLE>
+    <script type="text/javascript">var script_name = "{{ script_name }}";</script>{% block headmatter %}{% endblock %}
   </HEAD>
   <BODY>
     <div class="ui {{ ui_class | d('') }}">{% if flash is defined %}<div id="flash" class="flash flash-{{ flash_type | d('info') }}">{{ flash }}{% else %}<div id="flash" class="flash flash-empty">&nbsp;{% endif %}</div>{% block ui %}BASE UI{% endblock %}</div>
-      <IFRAME class="ui {{ ui_class | d('') }}" id="frame" src="/daily/{% block iframesrc %}MISSING{% endblock %}"></IFRAME>
+      <IFRAME class="ui {{ ui_class | d('') }}" id="frame" src="{{ base_path }}/{% block iframesrc %}MISSING{% endblock %}"></IFRAME>
   </BODY>
 </HTML>
