@@ -1,2 +1,5 @@
 # Ignore python version file
 .python-version
+
+# Misc
+*.DS_Store
