@@ -55,3 +55,4 @@ if (( newest_day > current_day )); then
     webhook=$(<${SLACK_WEBHOOK})
     curl -X POST -H 'Content-type: application/json' --data "${payload}" ${webhook}
     echo ${newest_day} > ${CHECKFILE}
+fi
