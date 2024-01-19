@@ -1,13 +1,13 @@
 {% extends "base.html.j2" %}
 {% block title %}Login required{% endblock %}
 {% block ui %}<H2>Please Log In</H2>
-<form method="POST" action="{{ script_name }}"><input type="hidden" name="csd" value="{{ csd }}"/>
+<form method="POST" action="{{ script_name }}"><input type="hidden" name="csd" value="{{ csd }}">
 {% if fortnight | d(false) %}
-<input type="hidden" name="fortnight" value="true"/>
+<input type="hidden" name="fortnight" value="true">
 {% endif %}
-<label for="user_name" class="login">Username:</label> <input type="text" name="user_name"/>
-<br/>
-<label for="user_password" class="login">Password:</label> <input type="password" name="user_password"/>
-<br/><input type="submit" value="Log in">
+<label for="user_name" class="login">Username:</label> <input id="user_name" type="text" name="user_name">
+<br>
+<label for="user_password" class="login">Password:</label> <input id="user_password" type="password" name="user_password">
+<br><input type="submit" value="Log in">
 </form>{% endblock %}
 {% block iframesrc %}blurry.html{% endblock %}
