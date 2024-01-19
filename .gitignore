@@ -3,3 +3,7 @@
 
 # Misc
 *.DS_Store
+
+# viewer stuff
+viewer/__pycache__
+viewer/rendered
