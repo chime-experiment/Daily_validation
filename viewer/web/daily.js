@@ -123,7 +123,7 @@ function set_csd(csd_in) {
   var index = csd_list.indexOf(new_csd)
 
   if (index === -1) {
-    index = csd_list.indexOf(new_csd)
+    index = csd_list.indexOf(csd)
   } else {
     csd = new_csd
   }
