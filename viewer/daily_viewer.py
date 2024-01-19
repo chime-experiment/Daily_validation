@@ -21,7 +21,8 @@ from chimedb.dataflag import (
     DataRevision,
 )
 
-__version__ = "v0.1"
+# The version string used to look up the client record in the DB.
+_DB_VERSION = "v0.1"
 
 # Should eventually be a settable parameter
 _REVISION = 7
@@ -55,7 +56,7 @@ def set_globals():
         OPINION_TYPE = DataFlagOpinionType.get(name="bondia")
     if CLIENT is None:
         CLIENT = DataFlagClient.get(
-            client_name="daily_viewer", client_version=__version__
+            client_name="daily_viewer", client_version=_DB_VERSION,
         )
 
 
@@ -67,7 +68,7 @@ def render_template(name, data, headers=None):
     data["base_path"] = str(pathlib.Path(script_name).parent)
 
     template = jinja_env.get_template(name + ".html.j2")
-    return 200, headers, "text/html", template.render(**data)
+    return 200, headers, "text/html; charset=utf-8", template.render(**data)
 
 
 def encode_session(user, issue_time=None):
@@ -434,12 +435,7 @@ def redirect_response(environ, headers, /, **query):
     """Generate a 302 redirect back to ourself, maybe with some query data."""
 
     # See PEP 3333 § URL Reconstruction
-    url = environ["wsgi.url_scheme"] + "://"
-
-    if environ.get("HTTP_HOST"):
-        url += environ["HTTP_HOST"]
-    else:
-        url += environ["SERVER_NAME"]
+    url = environ["wsgi.url_scheme"] + "://" + environ["SERVER_NAME"]
 
     if environ["wsgi.url_scheme"] == "https":
         if environ["SERVER_PORT"] != "443":
@@ -667,7 +663,7 @@ def get_response(environ):
         # Returns an HTML file from the render_dir
         try:
             with open(render_dir.joinpath(f"{query['fetch']}.html"), "rb") as f:
-                return 200, headers, "text/html", [f.read()]
+                return 200, headers, "text/html; charset=utf-8", [f.read()]
         except (FileNotFoundError, PermissionError):
             return 404, headers
     elif "decision" in query:
@@ -711,7 +707,7 @@ def application(environ, start_response):
     # Unpack response and handle errors
     if response[0] != 200:
         status, headers = response
-        content_type = "text/plain"
+        content_type = "text/plain; charset=us-ascii"
         payload = [http_status[status]]
     else:
         status, headers, content_type, payload = response
@@ -724,13 +720,18 @@ def application(environ, start_response):
 
     # Encode the payload, if necessary
     encoded_payload = list()
+    content_length = 0
     for item in payload:
         if isinstance(item, bytes):
-            encoded_payload.append(item)
+            pass
         elif isinstance(item, str):
-            encoded_payload.append(item.encode("utf-8"))
+            item = item.encode("utf-8")
         else:
             raise TypeError(f"Don't know what to do with {item} ({type(item)})")
+        encoded_payload.append(item)
+        content_length += len(item)
+
+    headers.append(("Content-Length", str(content_length)))
 
     # Return WSGI response
     start_response(http_status[status], headers)
