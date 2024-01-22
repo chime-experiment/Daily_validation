@@ -27,6 +27,9 @@ _DB_VERSION = "v0.1"
 # Should eventually be a settable parameter
 _REVISION = 7
 
+# Session expiry time, in days.  May be fractional
+SESSION_EXPIRY_DAYS = 7
+
 # Header to invalidate the session cookie
 INVALIDATE_SESSION = ("Set-Cookie", "dv_session=; SameSite=Strict; Secure; Max-Age=0;")
 
@@ -101,7 +104,7 @@ def decode_session(session):
 
     # Check for session expiry
     try:
-        if int(parts[1]) + 86400 <= time.time():
+        if int(parts[1]) + SESSION_EXPIRY_DAYS * 86400 <= time.time():
             return None
     except ValueError:
         # Non-numeric time
