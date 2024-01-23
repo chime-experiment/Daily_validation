@@ -12,8 +12,8 @@
 #
 #    sudo ./deploy_to_venv /opt/venvs/daily_viewer
 #
-# This essentially is a "production" deployment.  To set up/deploy
-# to the test version, run the ./set_up_test script, instead
+# This is a production deployment.  To set up/run the test version,
+# see the ./test_server script, instead.
 
 # Things to deploy.  Directories are deployed recursively
 DEPLOY_LIST="daily_viewer.py fetch_from_cedar.sh templates web"
