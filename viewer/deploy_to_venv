@@ -1,0 +1,91 @@
+#!/bin/bash
+
+# This is a little script to help deployment of the viewer on bao to
+# the daily viewer virtualenv.  Run it with sudo, either from within
+# the daily viewer virtualenv:
+#
+#    source /opt/venvs/daily_viewer/bin/activate
+#    sudo ./deploy_to_venv
+#
+# or else by specifying the path to the virtialenv on the command
+# line:
+#
+#    sudo ./deploy_to_venv /opt/venvs/daily_viewer
+#
+# This essentially is a "production" deployment.  To set up/deploy
+# to the test version, run the ./set_up_test script, instead
+
+# Things to deploy.  Directories are deployed recursively
+DEPLOY_LIST="daily_viewer.py fetch_from_cedar.sh templates web"
+
+function check_venv () {
+  if [[ "x${VIRTUAL_ENV}" = "x" ]]; then
+    echo "Not inside a virtualenv"
+    exit 1
+  fi
+
+  if [[ ! -d "${VIRTUAL_ENV}" ]]; then
+    echo "${VIRTUAL_ENV} does not appear to be a virtualenv"
+    exit 1
+  fi
+
+  if [[ ! -x "${VIRTUAL_ENV}/bin/gunicorn" ]]; then
+    echo "gunicorn not found in virtualenv"
+    exit 1
+  fi
+}
+
+function start_venv () {
+  _venvdir="$1"
+
+  if [[ ! -f ${_venvdir}/bin/activate ]]; then
+    echo "Argument \"${_venvdir}\" does not appear to be a virtualenv"
+    exit 1
+  fi
+  source ${_venvdir}/bin/activate
+}
+
+# Check deployment type
+if [[ $# -gt 1 ]]; then
+  echo "Extra arguments"
+  exit 1
+elif [[ "x$1" != "x" ]]; then
+  start_venv $1
+fi
+
+# Sanity check
+check_venv
+
+# Create viewer dir, if necessary
+DEPLOY_DIR="${VIRTUAL_ENV}/viewer"
+if [[ ! -d ${DEPLOY_DIR} ]]; then
+  echo "Creating viewer directory: ${DEPLOY_DIR}"
+  mkdir -v ${DEPLOY_DIR} || exit 1
+fi
+
+# Remember this for later
+if [[ -d ${DEPLOY_DIR}/web ]]; then
+  have_webdir=yes
+else
+  have_webdir=no
+fi
+
+# Copy stuff
+for thing in $DEPLOY_LIST; do
+  cp -rufv $thing $DEPLOY_DIR/
+done
+
+# Make the render directory, if needed
+if [[ ! -d $DEPLOY_DIR/rendered ]]; then
+  mkdir -v $DEPLOY_DIR/rendered
+fi
+
+# Helpful-ish(?) note
+if [[ $have_webdir = "no" ]]; then
+  echo
+  echo "New web dir created.  Make sure the web server can serve the directory:"
+  echo
+  echo "  ${DEPLOY_DIR}/web"
+  echo
+  echo "via the base URL used by the viewer proxy (see the README for details)."
+fi

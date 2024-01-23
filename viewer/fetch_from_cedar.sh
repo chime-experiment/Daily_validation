@@ -12,7 +12,7 @@ SOURCEGLOB="rev${REV}_*.html"
 SLACK_WEBHOOK=/usr/local/share/slack/daily_pipeline_webhook
 VIEWER_LINK="https://bao.chimenet.ca/daily/view?csd="
 
-DESTBASE=/mnt/md1/daily
+DESTBASE=/opt/venvs/daily_viewer/viewer
 DESTDIR=${DESTBASE}/rendered/
 CHECKFILE=${DESTDIR}/.newest_day.txt
 
