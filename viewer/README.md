@@ -12,7 +12,11 @@ URL path (say `/daily/`), e.g.:
   sudo ln -s /opt/venvs/daily_viewer/viewer/web /srv/bao/daily
 ```
 
-4. Set up the reverse proxy in apache:
+4. Create and populate the `rendered` subdirectory in the deployed viewer
+directory (e.g. `/opt/venvs/daily_viewer/viewer/rendered`).  This may be a
+symlink to a directory elsewehere.
+
+5. Set up the reverse proxy in apache:
 ```
   ProxyPass /daily/view http://127.0.0.1:4884/
   ProxyPassReverse /daily/view http://127.0.0.1:4884/
@@ -23,7 +27,7 @@ URL path (say `/daily/`), e.g.:
   RedirectMatch ^/daily-test/$ /daily-test/view
 ```
 
-5. Start the gunicorn server (this does not need to be done from within the
+6. Start the gunicorn server (this does not need to be done from within the
 virtualenv):
 ```
     /opt/venvs/daily_viewer/bin/gunicorn -b 127.0.0.1:4884 -w 4 /opt/venvs/daily_viewer/viewer/daily_viewer:application

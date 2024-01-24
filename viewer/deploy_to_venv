@@ -75,9 +75,10 @@ for thing in $DEPLOY_LIST; do
   cp -rufv $thing $DEPLOY_DIR/
 done
 
-# Make the render directory, if needed
+# Warn about a missing rendered directory, if appropriate
 if [[ ! -d $DEPLOY_DIR/rendered ]]; then
-  mkdir -v $DEPLOY_DIR/rendered
+  echo
+  echo "WARNING: ${DEPLOY_DIR}/rendered needs to be created and populated"
 fi
 
 # Helpful-ish(?) note
