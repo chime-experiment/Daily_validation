@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# This script will help you set-up and run a test-deployment
+# of the viewer on bao.
+#
+# It must be run from within a gunicorn-enabled virtualenv.
+# You can use the production virtualenv
+# (/opt/venvs/daily_viewer) without issue, or else roll
+# your own.
+#
+# By default, this script will first set-up bao to run the
+# test server from the current directory, and then start
+# the server.  If you only want to run the install portion
+# of the script, pass '-i' as an argument.
+#
+# If you have created a local "rendered" directory in the
+# current directory, that will be used by the test server.
+# If you haven't made one, a symlink will be made from the
+# production `/rendered` directory into the current directory
+# for use by the test server.  (You can remove this later and
+# replace it with a directory, if you would like.)
+#
+# This script should _not_ need to be run using sudo, but
+# may use sudo, if necessary, to set up the test environment.
+
+# The Apache document root
+DOCUMENT_ROOT=/srv/bao
+
+# Name of the test-deployment URL. (i.e. https://bao.chimenet.ca/daily-test/)
+TEST_URL_BASE=daily-test
+
+# Check virtualenv
+if [[ "x${VIRTUAL_ENV}" = "x" ]]; then
+  echo "Not inside a virtualenv"
+  exit 1
+fi
+
+if [[ ! -d "${VIRTUAL_ENV}" ]]; then
+  echo "${VIRTUAL_ENV} does not appear to be a virtualenv"
+  exit 1
+fi
+
+if [[ ! -x "${VIRTUAL_ENV}/bin/gunicorn" ]]; then
+  echo "gunicorn not found in virtualenv"
+  exit 1
+fi
+
+# Do we need the render dir
+if [[ ! -e ./rendered ]]; then
+  if [[ ! -d "${VIRTUAL_ENV}/viewer/rendered" ]]; then
+    echo "No deployed viewer/rendered directory in ${VIRTUAL_ENV}"
+    exit 1
+  fi
+  ln -sv "${VIRTUAL_ENV}/viewer/rendered" .
+fi
+
+# Check the apache symlink, if necessary
+LINKPATH="${DOCUMENT_ROOT}/${TEST_URL_BASE}"
+LINKDEST="$(pwd)/web"
+needlink=yes
+if [[ -e ${LINKPATH} ]]; then
+  if [[ ! -L ${LINKPATH} ]]; then
+    echo "${LINKPATH} is not a symlink.  Cannot continue."
+    exit 1
+  fi
+  
+  if [[ "$(readlink ${LINKPATH})" = "$LINKDEST" ]]; then
+    needlink=no
+  fi
+fi
+
+# Create symlink
+if [[ $needlink = "yes" ]]; then
+  sudo /bin/ln -sTfv $LINKDEST $LINKPATH
+fi
+
+# If running in install-only mode, we're done
+if [[ "x$1" = "x-i" ]]; then
+  exit 0
+fi
+
+# Otherwise, run the test server by exec'ing it
+exec ${VIRTUAL_ENV}/bin/gunicorn -b 127.0.0.1:4885 --log-level debug -w 4 daily_viewer:application
