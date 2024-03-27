@@ -1,6 +1,6 @@
 chimedb @ git+https://github.com/chime-experiment/chimedb.git
 chimedb.dataflag @ git+https://github.com/chime-experiment/chimedb_dataflag.git#egg=chimedb.dataflag[vote]
-chimedb.config @ git+ssh://github.com/chime-experiment/chimedb_config.git
+chimedb.config @ git+ssh://git@github.com/chime-experiment/chimedb_config.git
 gunicorn
 jinja2
 peewee
