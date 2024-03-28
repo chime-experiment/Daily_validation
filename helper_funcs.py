@@ -90,7 +90,7 @@ def _hide_axis(ax):
     ax.tick_params(left=False, bottom=False)
 
 
-def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
+def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno", dynamic_clim=False):
     """
     Plots the delay spectrum for a given LSD.
 
@@ -118,6 +118,14 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno"):
 
     tau = DS.index_map["delay"] * 1e3
     DS_Spec = DS.spectrum
+
+    if dynamic_clim:
+        # Order of magnitude of the mean of the 2 cyl sep high-delay region
+        # This is fairly arbitrary and not very robust, so it should be
+        # improved
+        spec_m = np.floor(np.log10(np.median(DS_Spec)))
+        delta = np.floor(np.log10(clim[0])) - spec_m
+        clim[1] = 10 ** (np.floor(np.log10(clim[1])) - delta)
 
     baseline_vec = DS.index_map["baseline"]
     bl_mask = _mask_baselines(baseline_vec)
@@ -918,11 +926,11 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     # Calculate events like solar transit, rise ...
     ev = events(chime_obs, LSD)
 
-    _, axes = plt.subplots(
+    fig, axes = plt.subplots(
         2,
         1,
         sharex=True,
-        figsize=(14, 13),
+        figsize=(14, 18),
         gridspec_kw=dict(height_ratios=[1, 10], hspace=0.0),
     )
 
@@ -934,7 +942,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
         axes[0].fill_between(
             ra, ii, ii + 1, where=series, label=type_, color=f"C{ii}", alpha=0.5
         )
-    axes[0].legend()
+
     axes[0].set_yticks([])
     axes[0].set_ylim(0, ii + 1)
 
@@ -980,3 +988,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     # Give the overall plot a title identifying the CSD
     title = "rev 0" + str(rev) + ", LSD " + str(LSD) + f", {freq[0]:.2f}" + " MHz"
     axes[0].set_title(title, fontsize=fontsize)
+
+    # Add the legend
+    h1, l1 = axes[0].get_legend_handles_labels()
+    fig.legend(h1, l1, loc=1)
