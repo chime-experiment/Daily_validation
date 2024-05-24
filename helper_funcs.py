@@ -11,6 +11,7 @@ from skyfield import almanac
 from datetime import datetime
 
 from caput import weighted_median
+from caput.tools import invert_no_zero
 from caput import time as ctime
 from draco.core import containers
 from draco.util import tools
@@ -458,7 +459,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     fig, axis = plt.subplots(1, 1, figsize=(15, 10))
 
     sensrat = sens.measured[:, sp] * tools.invert_no_zero(sens.radiometer[:, sp])
-    sensrat /= np.median(sensrat, axis=1)[:, np.newaxis]
+    sensrat *= invert_no_zero(np.median(sensrat, axis=1))[:, np.newaxis]
     sensrat *= np.where(rfm.mask[:] == 0, 1, np.nan)
     sensrat *= np.where(_mask_flags(sens.time, LSD), np.nan, 1)
 
