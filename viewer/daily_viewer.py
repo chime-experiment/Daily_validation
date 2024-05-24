@@ -59,7 +59,8 @@ def set_globals():
         OPINION_TYPE = DataFlagOpinionType.get(name="bondia")
     if CLIENT is None:
         CLIENT = DataFlagClient.get(
-            client_name="daily_viewer", client_version=_DB_VERSION,
+            client_name="daily_viewer",
+            client_version=_DB_VERSION,
         )
 
 
@@ -169,7 +170,7 @@ def do_login(query):
     csd = query.get("csd", 0)
 
     # Are we in two-week mode?
-    fortnight = ("fortnight" in query)
+    fortnight = "fortnight" in query
 
     if "user_name" in query and "user_password" in query:
         # Try to log in.  `success`
@@ -187,9 +188,9 @@ def do_login(query):
         flash_type = "info"
 
     # Data
-    data={"csd": csd, "flash": flash, "flash_type": flash_type}
+    data = {"csd": csd, "flash": flash, "flash_type": flash_type}
     if fortnight:
-        data["fortnight"]="yes"
+        data["fortnight"] = "yes"
 
     # Invalidate the cookie and show the login page
     return render_template(
