@@ -162,7 +162,6 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno", dynamic_clim=F
         ax[i].yaxis.set_tick_params(labelsize=18)
         ax[i].set_title(f"{i}-cyl", fontsize=20)
 
-    # ax[0].set_ylabel("Delay [ns]")
     fig.supxlabel("NS baseline length [m]", fontsize=20)
     fig.supylabel("Delay [ns]", fontsize=20)
     title = "rev 0" + str(rev) + ", CSD " + str(LSD) + ", hpf = " + str(hpf)
@@ -173,14 +172,12 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno", dynamic_clim=F
     )
 
     del DS
-    pass
 
 
 def plotMultipleDS(
     rev,
     csd_start,
     num_days,
-    view="grid",
     reverse=True,
     hpf=False,
     clim=[1e-3, 1e2],
@@ -196,10 +193,6 @@ def plotMultipleDS(
         First csd in the range
     num_days : int
         Number of days to plot, starting at `csd_start`
-    view : str, optional (default "grid")
-        How to display the plots. If `grid`, delay spectra are shown
-        on a dense nx3 grid. If `list`, delay spectra are plotted one
-        at a time using the plotting format in `plotDS`
     reverse : bool, optional (default True)
         If true, display days in decreasing order
     hpf : bool, optional (default False)
@@ -214,26 +207,11 @@ def plotMultipleDS(
         print("No days requested")
         return
 
-    if view not in {"list", "grid"}:
-        print("Invalid value for kwarg `view`. Using default `grid`")
-        view = "grid"
-
     # Accumulate the number of days available
     count = 0
     csds = list(range(csd_start, csd_start + num_days))
     if reverse:
         csds = csds[::-1]
-
-    if view == "list":
-        for csd in csds:
-            try:
-                plotDS(rev, csd, hpf, clim, cmap)
-            except FileNotFoundError:
-                count += 1
-
-        print(f"Data products found for {num_days - count}/{num_days} days.")
-
-        return
 
     type_ = "delayspectrum_hpf" if hpf else "delayspectrum"
 
