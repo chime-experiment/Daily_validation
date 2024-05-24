@@ -10,6 +10,10 @@ from skyfield import almanac
 
 from datetime import datetime
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from caput import weighted_median
 from caput.tools import invert_no_zero
 from caput import time as ctime
@@ -34,9 +38,26 @@ _file_spec = {
     "delayspectrum": ("delayspectrum_", ".h5"),
     "delayspectrum_hpf": ("delayspectrum_hpf_", ".h5"),
     "sensitivity": ("sensitivity_", ".h5"),
-    "rfi_mask": ("rfi_mask_", ".h5"),
+    "chisq": ("chisq_", ".h5"),
+    "power": ("lowpass_power_2cyl_", ".h5"),
+    "chisq_mask": {"rfi_mask_chisq_", ".h5"},
+    "stokesi_mask": ("rfi_mask_stokesi_", ".h5"),
+    "sens_mask": ("rfi_mask_sensitivity_", ".h5"),
+    "fact_mask": ("rfi_mask_factorized_", ".h5"),
     "sourceflux": ("sourceflux_", "_bright.h5"),
 }
+
+
+def _fail_quietly(func):
+    """Just log any exceptions."""
+
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as err:
+            logger.debug(f"Function {func.__name__} failed with error:\n{err}")
+
+    return wrapper
 
 
 def _get_rev_path(type_: str, rev: int, lsd: int) -> Path:
@@ -91,9 +112,19 @@ def _hide_axis(ax):
     ax.tick_params(left=False, bottom=False)
 
 
-def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno", dynamic_clim=False):
+@_fail_quietly
+def plotDS(
+    rev,
+    LSD,
+    hpf=False,
+    clim=[[1e-3, 1e2], [1e-3, 1e-2]],
+    cmap="inferno",
+    dynamic_clim=True,
+):
     """
     Plots the delay spectrum for a given LSD.
+
+    Show the delay spectrum in two different color ranges.
 
     Parameters
     ----------
@@ -103,16 +134,12 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno", dynamic_clim=F
           Day number
     hpf : bool, optional (default False)
           with/without high pass filter (True/False)
-    clim : list, optional (default [1e-3, 1e2])
-        min, max values in the colorscale
+    clim : list[list], optional (default [[1e-3, 1e2], [1e-3, 1e-2]])
+        min, max values in the colorscale for each plot
     cmap : colormap, optional (default 'inferno')
     dynamic_clim : bool, optional
         If true, clim will be adjusted to try to compress
         the upper limit without saturating
-
-    Returns
-    -------
-    Delay Spectrum
     """
 
     type_ = "delayspectrum_hpf" if hpf else "delayspectrum"
@@ -127,54 +154,59 @@ def plotDS(rev, LSD, hpf=False, clim=[1e-3, 1e2], cmap="inferno", dynamic_clim=F
         # Order of magnitude of the mean of the 2 cyl sep high-delay region
         # This is fairly arbitrary and not very robust, so it should be
         # improved
+        # Only modify the second clims
         spec_m = np.floor(np.log10(np.median(DS_Spec)))
-        delta = np.floor(np.log10(clim[0])) - spec_m
-        clim[1] = 10 ** (np.floor(np.log10(clim[1])) - delta)
+        delta = np.floor(np.log10(clim[1][0])) - spec_m
+        clim[1][1] = 10 ** (np.floor(np.log10(clim[1][1])) - delta)
 
     baseline_vec = DS.index_map["baseline"]
     bl_mask = _mask_baselines(baseline_vec)
 
-    fig, ax = plt.subplots(
-        1, 4, figsize=(15, 8), sharey=True, gridspec_kw={"width_ratios": [1, 2, 2, 2]}
-    )
-    imshow_params = {
-        "origin": "lower",
-        "aspect": "auto",
-        "interpolation": "none",
-        "norm": LogNorm(),
-        "clim": clim,
-        "cmap": cmap,
-    }
+    # Make the master figure
+    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    # Make the two sub-figures
+    subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    for i in range(4):
-        baseline_idx_sorted = baseline_vec[bl_mask[i], 1].argsort()
-        extent = [
-            baseline_vec[bl_mask[i], 1].min(),
-            baseline_vec[bl_mask[i], 1].max(),
-            tau[0],
-            tau[-1],
-        ]
-        im = ax[i].imshow(
-            DS_Spec[bl_mask[i]][baseline_idx_sorted].T.real,
-            extent=extent,
-            **imshow_params,
+    for ii, fig in enumerate(subfigs):
+        ax = fig.subplots(1, 4, sharey=True, gridspec_kw={"width_ratios": [1, 2, 2, 2]})
+
+        imshow_params = {
+            "origin": "lower",
+            "aspect": "auto",
+            "interpolation": "none",
+            "norm": LogNorm(vmin=clim[ii][0], vmax=clim[ii][1]),
+            "cmap": cmap,
+        }
+
+        for i in range(4):
+            baseline_idx_sorted = baseline_vec[bl_mask[i], 1].argsort()
+            extent = [
+                baseline_vec[bl_mask[i], 1].min(),
+                baseline_vec[bl_mask[i], 1].max(),
+                tau[0],
+                tau[-1],
+            ]
+            im = ax[i].imshow(
+                DS_Spec[bl_mask[i]][baseline_idx_sorted].T.real,
+                extent=extent,
+                **imshow_params,
+            )
+            ax[i].xaxis.set_tick_params(labelsize=18)
+            ax[i].yaxis.set_tick_params(labelsize=18)
+            ax[i].set_title(f"{i}-cyl", fontsize=20)
+
+        fig.supxlabel("NS baseline length [m]", fontsize=20)
+        fig.supylabel("Delay [ns]", fontsize=20)
+        title = "rev 0" + str(rev) + ", CSD " + str(LSD) + ", hpf = " + str(hpf)
+        fig.suptitle(title, fontsize=20)
+        fig.colorbar(
+            im, ax=ax, orientation="vertical", label="Signal Power", pad=0.02, aspect=40
         )
-        ax[i].xaxis.set_tick_params(labelsize=18)
-        ax[i].yaxis.set_tick_params(labelsize=18)
-        ax[i].set_title(f"{i}-cyl", fontsize=20)
 
-    fig.supxlabel("NS baseline length [m]", fontsize=20)
-    fig.supylabel("Delay [ns]", fontsize=20)
-    title = "rev 0" + str(rev) + ", CSD " + str(LSD) + ", hpf = " + str(hpf)
-    fig.suptitle(title, fontsize=20)
-    fig.subplots_adjust(wspace=0.05)
-    fig.colorbar(
-        im, ax=ax, orientation="vertical", label="Signal Power", pad=0.02, aspect=40
-    )
-
-    del DS
+    plt.show()
 
 
+@_fail_quietly
 def plotMultipleDS(
     rev,
     csd_start,
@@ -308,6 +340,7 @@ def plotMultipleDS(
 # ========================================================================
 
 
+@_fail_quietly
 def plotRingmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
     """
     Plots the delay spectrum for a given LSD.
@@ -448,61 +481,286 @@ def _mask_flags(times, LSD):
     return flag_mask
 
 
+@_fail_quietly
 def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     path = _get_rev_path("sensitivity", rev, LSD)
     sens = containers.SystemSensitivity.from_file(path)
 
-    rfi_path = _get_rev_path("rfi_mask", rev, LSD)
-    rfm = containers.RFIMask.from_file(rfi_path)
+    # Load the relevant mask
+    rfm = np.zeros((sens.measured[:].shape[0], sens.measured.shape[2]), dtype=bool)
+    for name in {"sens_mask"}:
+        rfi_path = _get_rev_path(name, rev, LSD)
+        try:
+            file = containers.RFIMask.from_file(rfi_path)
+        except FileNotFoundError:
+            continue
+
+        rfm |= file.mask[:]
 
     sp = 0
-    fig, axis = plt.subplots(1, 1, figsize=(15, 10))
 
     sensrat = sens.measured[:, sp] * tools.invert_no_zero(sens.radiometer[:, sp])
     sensrat *= invert_no_zero(np.median(sensrat, axis=1))[:, np.newaxis]
-    sensrat *= np.where(rfm.mask[:] == 0, 1, np.nan)
-    sensrat *= np.where(_mask_flags(sens.time, LSD), np.nan, 1)
+    sensrat_mask = sensrat * np.where(rfm == 0, 1, np.nan)
+    sensrat_mask *= np.where(_mask_flags(sens.time, LSD), np.nan, 1)
 
     cmap = copy.copy(matplotlib.cm.viridis)
     cmap.set_bad("#aaaaaa")
 
-    im = axis.imshow(
-        sensrat,
-        extent=(0, 360, 400, 800),
-        cmap=cmap,
-        aspect="auto",
-        vmin=vmin,
-        vmax=vmax,
-    )
-    divider = make_axes_locatable(axis)
-    cax = divider.append_axes("right", size="1.5%", pad=0.25)
-    fig.colorbar(im, cax=cax)
-    axis.set_xlabel("RA [deg]")
-    axis.set_ylabel("Freq [MHz]")
+    # Make the master figure
+    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    # MAke the two sub-figures
+    subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    # Calculate events like solar transit, rise ...
-    ev = events(chime_obs, LSD)
-    # Highlight the day time data
-    sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-    ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+    for fig, sim in zip(subfigs, (sensrat, sensrat_mask)):
 
-    if sr < ss:
-        axis.axvspan(sr, ss, color="grey", alpha=0.5)
-    else:
-        axis.axvspan(0, ss, color="grey", alpha=0.5)
-        axis.axvspan(sr, 360, color="grey", alpha=0.5)
+        axis = fig.subplots(1, 1)
 
-    axis.axvline(sr, color="k", ls="--", lw=1)
-    axis.axvline(ss, color="k", ls="--", lw=1)
+        im = axis.imshow(
+            sim,
+            extent=(0, 360, 400, 800),
+            cmap=cmap,
+            aspect="auto",
+            vmin=vmin,
+            vmax=vmax,
+        )
+        divider = make_axes_locatable(axis)
+        cax = divider.append_axes("right", size="1.5%", pad=0.25)
+        fig.colorbar(im, cax=cax)
+        axis.set_xlabel("RA [deg]")
+        axis.set_ylabel("Freq [MHz]")
 
-    title = "rev 0" + str(rev) + ", LSD " + str(LSD)
-    axis.set_title(title, fontsize=20)
-    _ = axis.set_xticks(np.arange(0, 361, 45))
+        # Calculate events like solar transit, rise ...
+        ev = events(chime_obs, LSD)
+        # Highlight the day time data
+        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+
+        if sr < ss:
+            axis.axvspan(sr, ss, color="grey", alpha=0.4)
+        else:
+            axis.axvspan(0, ss, color="grey", alpha=0.4)
+            axis.axvspan(sr, 360, color="grey", alpha=0.4)
+
+        axis.axvline(sr, color="k", ls="--", lw=1)
+        axis.axvline(ss, color="k", ls="--", lw=1)
+
+        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+        axis.set_title(title, fontsize=20)
+        _ = axis.set_xticks(np.arange(0, 361, 45))
+
+
+@_fail_quietly
+def plotChisq(rev, LSD, vmin=0.9, vmax=1.5):
+    path = _get_rev_path("chisq", rev, LSD)
+    chisq = containers.TimeStream.from_file(path)
+
+    vis = chisq.vis[:, 0].real
+
+    # Load all input masks
+    rfm = np.zeros(vis.shape, dtype=bool)
+    for name in {"stokesi_mask", "sens_mask"}:
+        rfi_path = _get_rev_path(name, rev, LSD)
+        try:
+            file = containers.RFIMask.from_file(rfi_path)
+        except FileNotFoundError:
+            continue
+        rfm |= file.mask[:]
+
+    # Load the chisq mask
+    chim = np.zeros_like(rfm)
+    for name in {"chisq_mask"}:
+        rfi_path = _get_rev_path(name, rev, LSD)
+        try:
+            file = containers.RFIMask.from_file(rfi_path)
+        except FileNotFoundError:
+            continue
+        chim |= file.mask[:]
+
+    vis *= np.where(chim == 0, 1, np.nan)
+    vis_mask = vis * np.where(rfm == 0, 1, np.nan)
+    vis_mask *= np.where(_mask_flags(chisq.time, LSD), np.nan, 1)
+
+    cmap = copy.copy(matplotlib.cm.viridis)
+    cmap.set_bad("#aaaaaa")
+
+    # Make the master figure
+    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    # Make the two sub-figures
+    subfigs = mfig.subfigures(1, 2, wspace=0.1)
+
+    for fig, sim in zip(subfigs, (vis, vis_mask)):
+
+        axis = fig.subplots(1, 1)
+
+        im = axis.imshow(
+            sim,
+            extent=(0, 360, 400, 800),
+            cmap=cmap,
+            aspect="auto",
+            norm=LogNorm(vmin=vmin, vmax=vmax),
+        )
+        divider = make_axes_locatable(axis)
+        cax = divider.append_axes("right", size="1.5%", pad=0.25)
+        fig.colorbar(im, cax=cax)
+        axis.set_xlabel("RA [deg]")
+        axis.set_ylabel("Freq [MHz]")
+
+        # Calculate events like solar transit, rise ...
+        ev = events(chime_obs, LSD)
+        # Highlight the day time data
+        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+
+        if sr < ss:
+            axis.axvspan(sr, ss, color="grey", alpha=0.4)
+        else:
+            axis.axvspan(0, ss, color="grey", alpha=0.4)
+            axis.axvspan(sr, 360, color="grey", alpha=0.4)
+
+        axis.axvline(sr, color="k", ls="--", lw=1)
+        axis.axvline(ss, color="k", ls="--", lw=1)
+
+        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+        axis.set_title(title, fontsize=20)
+        _ = axis.set_xticks(np.arange(0, 361, 45))
+
+
+@_fail_quietly
+def plotVisPwr(rev, LSD, vmin=0, vmax=2):
+    path = _get_rev_path("power", rev, LSD)
+    power = containers.TimeStream.from_file(path)
+
+    vis = power.vis[:, 0].real
+
+    # Load the relevant RFI mask
+    rfm = np.zeros(vis.shape, dtype=bool)
+    for name in {"stokes_mask"}:
+        rfi_path = _get_rev_path(name, rev, LSD)
+        try:
+            file = containers.RFIMask.from_file(rfi_path)
+        except FileNotFoundError:
+            continue
+        rfm |= file.mask[:]
+
+    # Apply the initial weight mask
+    vis *= np.where(power.weight[:, 0] == 0, 1, np.nan)
+    # Apply the full mask
+    vis_mask = vis * np.where(rfm == 0, 1, np.nan)
+    vis_mask *= np.where(_mask_flags(power.time, LSD), np.nan, 1)
+
+    cmap = copy.copy(matplotlib.cm.viridis)
+    cmap.set_bad("#aaaaaa")
+
+    # Make the master figure
+    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    # MAke the two sub-figures
+    subfigs = mfig.subfigures(1, 2, wspace=0.1)
+
+    for fig, sim in zip(subfigs, (vis, vis_mask)):
+
+        axis = fig.subplots(1, 1)
+
+        im = axis.imshow(
+            sim,
+            extent=(0, 360, 400, 800),
+            cmap=cmap,
+            aspect="auto",
+            norm=LogNorm(vmin=vmin, vmax=vmax),
+        )
+        divider = make_axes_locatable(axis)
+        cax = divider.append_axes("right", size="1.5%", pad=0.25)
+        fig.colorbar(im, cax=cax)
+        axis.set_xlabel("RA [deg]")
+        axis.set_ylabel("Freq [MHz]")
+
+        # Calculate events like solar transit, rise ...
+        ev = events(chime_obs, LSD)
+        # Highlight the day time data
+        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+
+        if sr < ss:
+            axis.axvspan(sr, ss, color="grey", alpha=0.4)
+        else:
+            axis.axvspan(0, ss, color="grey", alpha=0.4)
+            axis.axvspan(sr, 360, color="grey", alpha=0.4)
+
+        axis.axvline(sr, color="k", ls="--", lw=1)
+        axis.axvline(ss, color="k", ls="--", lw=1)
+
+        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+        axis.set_title(title, fontsize=20)
+        _ = axis.set_xticks(np.arange(0, 361, 45))
+
+
+@_fail_quietly
+def plotFactMask(rev, LSD):
+    path = _get_rev_path("fact_mask", rev, LSD)
+    fmask = containers.RFIMask.from_file(path)
+
+    mask = fmask.mask[:]
+
+    # Load all the RFI masks
+    rfm = np.zeros(mask.shape, dtype=bool)
+    for name in {"stokesi_mask", "sens_mask", "chisq_mask"}:
+        rfi_path = _get_rev_path(name, rev, LSD)
+        try:
+            file = containers.RFIMask.from_file(rfi_path)
+        except FileNotFoundError:
+            continue
+        try:
+            rfm |= file.mask[:]
+        except NameError:
+            # First mask to be loaded
+            rfm = file.mask[:].copy()
+
+    # Make the master figure
+    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    # Make the two subfigures
+    subfigs = mfig.subfigures(1, 2, wspace=0.1)
+
+    for fig, sim in zip(subfigs, (rfm, mask)):
+        axis = fig.subplots(1, 1)
+
+        # Plot the fact mask first
+        axis.imshow(sim, extent=(0, 360, 400, 800), cmap="binary", aspect="auto")
+        # Plot the full mask partially transparently
+        im = axis.imshow(
+            rfm, extent=(0, 360, 400, 800), cmap="Reds", aspect="auto", alpha=0.8
+        )
+
+        # Set the colorbar and axes
+        divider = make_axes_locatable(axis)
+        cax = divider.append_axes("right", size="1.5%", pad=0.25)
+        fig.colorbar(im, cax=cax)
+        axis.set_xlabel("RA [deg]")
+        axis.set_ylabel("Freq [MHz]")
+
+        # Calculate events like solar transit, rise ...
+        ev = events(chime_obs, LSD)
+        # Highlight the day time data
+        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+
+        if sr < ss:
+            axis.axvspan(sr, ss, color="grey", alpha=0.2)
+        else:
+            axis.axvspan(0, ss, color="grey", alpha=0.2)
+            axis.axvspan(sr, 360, color="grey", alpha=0.2)
+
+        axis.axvline(sr, color="k", ls="--", lw=1)
+        axis.axvline(ss, color="k", ls="--", lw=1)
+
+        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+        axis.set_title(title, fontsize=20)
+        _ = axis.set_xticks(np.arange(0, 361, 45))
 
 
 # ========================================================================
 
 
+@_fail_quietly
 def plot_stability(
     rev,
     lsd,
@@ -825,6 +1083,7 @@ def imshow_sections(axis, x, y, c, gap_scale=0.1, *args, **kwargs):
 # ========================================================================
 
 
+@_fail_quietly
 def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     """
     Plots the template subtracted ringmap for a given LSD with additional
