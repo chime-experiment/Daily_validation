@@ -28,6 +28,10 @@ chime_obs = ephemeris.chime
 sf_obs = chime_obs.skyfield_obs()
 
 
+# ==== Plot color defaults ====
+_BAD_VALUE_COLOR = "#1a1a1a"
+
+
 # ==== Locations and helper functions for loading files ====
 
 base_path = Path("/project/rpp-chime/chime/chime_processed/daily")
@@ -173,7 +177,7 @@ def plotDS(
         imshow_params = {
             "origin": "lower",
             "aspect": "auto",
-            "interpolation": "none",
+            "interpolation": "nearest",
             "norm": LogNorm(vmin=clim[ii][0], vmax=clim[ii][1]),
             "cmap": cmap,
         }
@@ -386,6 +390,7 @@ def plotRingmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
             vmin=vmin,
             vmax=vmax,
             aspect="auto",
+            interpolation="nearest",
             extent=(0, 360, -1, 1),
             cmap=cmap,
         )
@@ -505,10 +510,10 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     sensrat_mask *= np.where(_mask_flags(sens.time, LSD), np.nan, 1)
 
     cmap = copy.copy(matplotlib.cm.viridis)
-    cmap.set_bad("#aaaaaa")
+    cmap.set_bad(_BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    mfig = plt.figure(layout="constrained", figsize=(100, 42))
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -521,6 +526,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
             extent=(0, 360, 400, 800),
             cmap=cmap,
             aspect="auto",
+            interpolation="nearest",
             vmin=vmin,
             vmax=vmax,
         )
@@ -551,7 +557,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
 
 
 @_fail_quietly
-def plotChisq(rev, LSD, vmin=0.9, vmax=1.5):
+def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     path = _get_rev_path("chisq", rev, LSD)
     chisq = containers.TimeStream.from_file(path)
 
@@ -577,15 +583,15 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.5):
             continue
         chim |= file.mask[:]
 
-    vis *= np.where(chim == 0, 1, np.nan)
-    vis_mask = vis * np.where(rfm == 0, 1, np.nan)
+    vis *= np.where(rfm == 0, 1, np.nan)
+    vis_mask = vis * np.where(chim == 0, 1, np.nan)
     vis_mask *= np.where(_mask_flags(chisq.time, LSD), np.nan, 1)
 
     cmap = copy.copy(matplotlib.cm.viridis)
-    cmap.set_bad("#aaaaaa")
+    cmap.set_bad(_BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    mfig = plt.figure(layout="constrained", figsize=(100, 42))
     # Make the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -598,6 +604,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.5):
             extent=(0, 360, 400, 800),
             cmap=cmap,
             aspect="auto",
+            interpolation="nearest",
             norm=LogNorm(vmin=vmin, vmax=vmax),
         )
         divider = make_axes_locatable(axis)
@@ -627,7 +634,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.5):
 
 
 @_fail_quietly
-def plotVisPwr(rev, LSD, vmin=0, vmax=2):
+def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     path = _get_rev_path("power", rev, LSD)
     power = containers.TimeStream.from_file(path)
 
@@ -635,7 +642,7 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=2):
 
     # Load the relevant RFI mask
     rfm = np.zeros(vis.shape, dtype=bool)
-    for name in {"stokes_mask"}:
+    for name in {"stokesi_mask"}:
         rfi_path = _get_rev_path(name, rev, LSD)
         try:
             file = containers.RFIMask.from_file(rfi_path)
@@ -650,10 +657,10 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=2):
     vis_mask *= np.where(_mask_flags(power.time, LSD), np.nan, 1)
 
     cmap = copy.copy(matplotlib.cm.viridis)
-    cmap.set_bad("#aaaaaa")
+    cmap.set_bad(_BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    mfig = plt.figure(layout="constrained", figsize=(100, 42))
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -666,7 +673,9 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=2):
             extent=(0, 360, 400, 800),
             cmap=cmap,
             aspect="auto",
-            norm=LogNorm(vmin=vmin, vmax=vmax),
+            interpolation="nearest",
+            vmin=vmin,
+            vmax=vmax,
         )
         divider = make_axes_locatable(axis)
         cax = divider.append_axes("right", size="1.5%", pad=0.25)
@@ -702,7 +711,6 @@ def plotFactMask(rev, LSD):
     mask = fmask.mask[:]
 
     # Load all the RFI masks
-    rfm = np.zeros(mask.shape, dtype=bool)
     for name in {"stokesi_mask", "sens_mask", "chisq_mask"}:
         rfi_path = _get_rev_path(name, rev, LSD)
         try:
@@ -716,45 +724,37 @@ def plotFactMask(rev, LSD):
             rfm = file.mask[:].copy()
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(35, 15))
-    # Make the two subfigures
-    subfigs = mfig.subfigures(1, 2, wspace=0.1)
+    fig = plt.figure(layout="constrained", figsize=(50, 42))
+    axis = fig.subplots(1, 1)
 
-    for fig, sim in zip(subfigs, (rfm, mask)):
-        axis = fig.subplots(1, 1)
+    # Plot the full mask
+    axis.imshow(
+        mask,
+        extent=(0, 360, 400, 800),
+        cmap="binary",
+        aspect="auto",
+        interpolation="nearest",
+    )
+    # Overlay the factorized mask
+    im = axis.imshow(
+        rfm,
+        extent=(0, 360, 400, 800),
+        cmap="Reds",
+        aspect="auto",
+        alpha=0.5,
+        interpolation="nearest",
+    )
 
-        # Plot the fact mask first
-        axis.imshow(sim, extent=(0, 360, 400, 800), cmap="binary", aspect="auto")
-        # Plot the full mask partially transparently
-        im = axis.imshow(
-            rfm, extent=(0, 360, 400, 800), cmap="Reds", aspect="auto", alpha=0.8
-        )
+    # Set the colorbar and axes
+    divider = make_axes_locatable(axis)
+    cax = divider.append_axes("right", size="1.5%", pad=0.25)
+    fig.colorbar(im, cax=cax)
+    axis.set_xlabel("RA [deg]")
+    axis.set_ylabel("Freq [MHz]")
 
-        # Set the colorbar and axes
-        divider = make_axes_locatable(axis)
-        cax = divider.append_axes("right", size="1.5%", pad=0.25)
-        fig.colorbar(im, cax=cax)
-        axis.set_xlabel("RA [deg]")
-        axis.set_ylabel("Freq [MHz]")
-
-        # Calculate events like solar transit, rise ...
-        ev = events(chime_obs, LSD)
-        # Highlight the day time data
-        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-
-        if sr < ss:
-            axis.axvspan(sr, ss, color="grey", alpha=0.2)
-        else:
-            axis.axvspan(0, ss, color="grey", alpha=0.2)
-            axis.axvspan(sr, 360, color="grey", alpha=0.2)
-
-        axis.axvline(sr, color="k", ls="--", lw=1)
-        axis.axvline(ss, color="k", ls="--", lw=1)
-
-        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
-        axis.set_title(title, fontsize=20)
-        _ = axis.set_xticks(np.arange(0, 361, 45))
+    title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+    axis.set_title(title, fontsize=20)
+    _ = axis.set_xticks(np.arange(0, 361, 45))
 
 
 # ========================================================================
@@ -1196,6 +1196,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
         vmin=-vl,
         vmax=vl,
         aspect="auto",
+        interpolation="nearest",
         extent=(0, 360, -1, 1),
         origin="lower",
         cmap=cmap,
