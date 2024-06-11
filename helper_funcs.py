@@ -167,7 +167,7 @@ def plotDS(
     bl_mask = _mask_baselines(baseline_vec)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(35, 15))
+    mfig = plt.figure(layout="constrained", figsize=(35, 12))
     # Make the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -513,7 +513,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     cmap.set_bad(_BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(100, 42))
+    mfig = plt.figure(layout="constrained", figsize=(50, 20))
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -533,8 +533,8 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         divider = make_axes_locatable(axis)
         cax = divider.append_axes("right", size="1.5%", pad=0.25)
         fig.colorbar(im, cax=cax)
-        axis.set_xlabel("RA [deg]")
-        axis.set_ylabel("Freq [MHz]")
+        axis.set_xlabel("RA [deg]", fontsize=30)
+        axis.set_ylabel("Freq [MHz]", fontsize=30)
 
         # Calculate events like solar transit, rise ...
         ev = events(chime_obs, LSD)
@@ -552,11 +552,10 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         axis.axvline(ss, color="k", ls="--", lw=1)
 
         title = "rev 0" + str(rev) + ", LSD " + str(LSD)
-        axis.set_title(title, fontsize=20)
+        axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
 
-@_fail_quietly
 def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     path = _get_rev_path("chisq", rev, LSD)
     chisq = containers.TimeStream.from_file(path)
@@ -591,7 +590,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     cmap.set_bad(_BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(100, 42))
+    mfig = plt.figure(layout="constrained", figsize=(50, 20))
     # Make the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -610,8 +609,8 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         divider = make_axes_locatable(axis)
         cax = divider.append_axes("right", size="1.5%", pad=0.25)
         fig.colorbar(im, cax=cax)
-        axis.set_xlabel("RA [deg]")
-        axis.set_ylabel("Freq [MHz]")
+        axis.set_xlabel("RA [deg]", fontsize=30)
+        axis.set_ylabel("Freq [MHz]", fontsize=30)
 
         # Calculate events like solar transit, rise ...
         ev = events(chime_obs, LSD)
@@ -629,7 +628,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         axis.axvline(ss, color="k", ls="--", lw=1)
 
         title = "rev 0" + str(rev) + ", LSD " + str(LSD)
-        axis.set_title(title, fontsize=20)
+        axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
 
@@ -660,7 +659,7 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     cmap.set_bad(_BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(100, 42))
+    mfig = plt.figure(layout="constrained", figsize=(50, 20))
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -680,8 +679,8 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         divider = make_axes_locatable(axis)
         cax = divider.append_axes("right", size="1.5%", pad=0.25)
         fig.colorbar(im, cax=cax)
-        axis.set_xlabel("RA [deg]")
-        axis.set_ylabel("Freq [MHz]")
+        axis.set_xlabel("RA [deg]", fontsize=30)
+        axis.set_ylabel("Freq [MHz]", fontsize=30)
 
         # Calculate events like solar transit, rise ...
         ev = events(chime_obs, LSD)
@@ -699,7 +698,7 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         axis.axvline(ss, color="k", ls="--", lw=1)
 
         title = "rev 0" + str(rev) + ", LSD " + str(LSD)
-        axis.set_title(title, fontsize=20)
+        axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
 
@@ -724,7 +723,7 @@ def plotFactMask(rev, LSD):
             rfm = file.mask[:].copy()
 
     # Make the master figure
-    fig = plt.figure(layout="constrained", figsize=(50, 42))
+    fig = plt.figure(layout="constrained", figsize=(15, 10))
     axis = fig.subplots(1, 1)
 
     # Plot the full mask
@@ -749,8 +748,8 @@ def plotFactMask(rev, LSD):
     divider = make_axes_locatable(axis)
     cax = divider.append_axes("right", size="1.5%", pad=0.25)
     fig.colorbar(im, cax=cax)
-    axis.set_xlabel("RA [deg]")
-    axis.set_ylabel("Freq [MHz]")
+    axis.set_xlabel("RA [deg]", fontsize=20)
+    axis.set_ylabel("Freq [MHz]", fontsize=20)
 
     title = "rev 0" + str(rev) + ", LSD " + str(LSD)
     axis.set_title(title, fontsize=20)
@@ -762,7 +761,7 @@ def plotFactMask(rev, LSD):
 
 @_fail_quietly
 def plot_stability(
-    rev,
+    Grev,
     lsd,
     pol=None,
     min_dec=0.0,
@@ -966,7 +965,7 @@ def plot_stability(
             vmax=max_val,
         )
 
-        cbar = fig.colorbar(img)
+        cbar = fig.colorbar(img, ax=ax)
         cbar.set_label(lbl)
 
         if flag_daytime:
@@ -1171,7 +1170,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
         2,
         1,
         sharex=True,
-        figsize=(14, 18),
+        figsize=(18, 15),
         gridspec_kw=dict(height_ratios=[1, 10], hspace=0.0),
     )
 
@@ -1206,7 +1205,14 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     axes[1].xaxis.set_tick_params(labelsize=labelsize)
     axes[1].set_ylabel("sin(ZA)", fontsize=fontsize)
     axes[1].set_xlabel("RA [degrees]", fontsize=fontsize)
-    cb = plt.colorbar(im, aspect=50, orientation="horizontal", pad=0.1)
+    cb = plt.colorbar(
+        im,
+        ax=axes.ravel(),
+        aspect=50,
+        orientation="horizontal",
+        pad=0.1,
+        location="bottom",
+    )
 
     # Put a ring around the location of the moon if it transits on this day
     if "lunar_transit" in ev:
