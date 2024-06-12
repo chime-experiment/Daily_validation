@@ -44,7 +44,7 @@ _file_spec = {
     "sensitivity": ("sensitivity_", ".h5"),
     "chisq": ("chisq_", ".h5"),
     "power": ("lowpass_power_2cyl_", ".h5"),
-    "chisq_mask": {"rfi_mask_chisq_", ".h5"},
+    "chisq_mask": ("rfi_mask_chisq_", ".h5"),
     "stokesi_mask": ("rfi_mask_stokesi_", ".h5"),
     "sens_mask": ("rfi_mask_sensitivity_", ".h5"),
     "fact_mask": ("rfi_mask_factorized_", ".h5"),
