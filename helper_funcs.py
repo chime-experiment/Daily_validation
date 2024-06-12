@@ -60,6 +60,7 @@ def _fail_quietly(func):
             return func(*args, **kwargs)
         except Exception as err:
             logger.debug(f"Function {func.__name__} failed with error:\n{err}")
+            return None
 
     return wrapper
 
@@ -86,6 +87,11 @@ def get_csd(day: int | str = None, num_days: int = 0, lag: int = 0) -> int:
         return int(ephemeris.unix_to_csd(day))
 
     return int(day)
+
+
+def _format_title(rev, LSD):
+    """Return a title string for plots."""
+    return f"rev_{int(rev):02d}, CSD {int(LSD):04d}"
 
 
 # ==========================================================================
@@ -201,7 +207,7 @@ def plotDS(
 
         fig.supxlabel("NS baseline length [m]", fontsize=20)
         fig.supylabel("Delay [ns]", fontsize=20)
-        title = "rev 0" + str(rev) + ", CSD " + str(LSD) + ", hpf = " + str(hpf)
+        title = _format_title(rev, LSD) + ", hpf = " + str(hpf)
         fig.suptitle(title, fontsize=20)
         fig.colorbar(
             im, ax=ax, orientation="vertical", label="Signal Power", pad=0.02, aspect=40
@@ -403,7 +409,7 @@ def plotRingmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="1.5%", pad=0.25)
     fig.colorbar(im, cax=cax)
-    title = "rev 0" + str(rev) + ", LSD " + str(LSD) + f", {freq[0]:.2f}" + " MHz"
+    title = _format_title(rev, LSD) + f", {freq[0]:.2f}" + " MHz"
     ax.set_title(title, fontsize=20)
 
 
@@ -551,7 +557,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         axis.axvline(sr, color="k", ls="--", lw=1)
         axis.axvline(ss, color="k", ls="--", lw=1)
 
-        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+        title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
@@ -627,7 +633,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         axis.axvline(sr, color="k", ls="--", lw=1)
         axis.axvline(ss, color="k", ls="--", lw=1)
 
-        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+        title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
@@ -697,7 +703,7 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         axis.axvline(sr, color="k", ls="--", lw=1)
         axis.axvline(ss, color="k", ls="--", lw=1)
 
-        title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+        title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
@@ -726,23 +732,24 @@ def plotFactMask(rev, LSD):
     fig = plt.figure(layout="constrained", figsize=(15, 10))
     axis = fig.subplots(1, 1)
 
-    # Plot the full mask
-    axis.imshow(
+    # Plot the factorized mask
+    im = axis.imshow(
         mask,
         extent=(0, 360, 400, 800),
         cmap="binary",
         aspect="auto",
         interpolation="nearest",
     )
-    # Overlay the factorized mask
-    im = axis.imshow(
-        rfm,
-        extent=(0, 360, 400, 800),
-        cmap="Reds",
-        aspect="auto",
-        alpha=0.5,
-        interpolation="nearest",
-    )
+    # Overlay the full mask if it exists
+    if "rfm" in locals():
+        axis.imshow(
+            rfm,
+            extent=(0, 360, 400, 800),
+            cmap="Reds",
+            aspect="auto",
+            alpha=0.5,
+            interpolation="nearest",
+        )
 
     # Set the colorbar and axes
     divider = make_axes_locatable(axis)
@@ -751,7 +758,7 @@ def plotFactMask(rev, LSD):
     axis.set_xlabel("RA [deg]", fontsize=20)
     axis.set_ylabel("Freq [MHz]", fontsize=20)
 
-    title = "rev 0" + str(rev) + ", LSD " + str(LSD)
+    title = _format_title(rev, LSD)
     axis.set_title(title, fontsize=20)
     _ = axis.set_xticks(np.arange(0, 361, 45))
 
@@ -761,7 +768,7 @@ def plotFactMask(rev, LSD):
 
 @_fail_quietly
 def plot_stability(
-    Grev,
+    rev,
     lsd,
     pol=None,
     min_dec=0.0,
@@ -1234,7 +1241,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
         ax.axvline(ss, color="k", ls="--", lw=1)
 
     # Give the overall plot a title identifying the CSD
-    title = "rev 0" + str(rev) + ", LSD " + str(LSD) + f", {freq[0]:.2f}" + " MHz"
+    title = _format_title(rev, LSD) + f", {freq[0]:.2f}" + " MHz"
     axes[0].set_title(title, fontsize=fontsize)
 
     # Add the legend
