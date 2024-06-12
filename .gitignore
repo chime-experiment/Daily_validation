@@ -4,6 +4,9 @@
 # Misc
 *.DS_Store
 
+# General files to ignore
+**/__pycache__
+**/.ipynb_checkpoints
+
 # viewer stuff
-viewer/__pycache__
 viewer/rendered
