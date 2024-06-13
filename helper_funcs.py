@@ -525,6 +525,8 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
 
     for fig, sim in zip(subfigs, (sensrat, sensrat_mask)):
 
+        mask_pcnt = 100.0 * np.isnan(sim).mean()
+
         axis = fig.subplots(1, 1)
 
         im = axis.imshow(
@@ -557,7 +559,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         axis.axvline(sr, color="k", ls="--", lw=1)
         axis.axvline(ss, color="k", ls="--", lw=1)
 
-        title = _format_title(rev, LSD)
+        title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
@@ -602,6 +604,8 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
 
     for fig, sim in zip(subfigs, (vis, vis_mask)):
 
+        mask_pcnt = 100.0 * np.isnan(sim).mean()
+
         axis = fig.subplots(1, 1)
 
         im = axis.imshow(
@@ -633,7 +637,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         axis.axvline(sr, color="k", ls="--", lw=1)
         axis.axvline(ss, color="k", ls="--", lw=1)
 
-        title = _format_title(rev, LSD)
+        title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
@@ -671,6 +675,8 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
 
     for fig, sim in zip(subfigs, (vis, vis_mask)):
 
+        mask_pcnt = 100.0 * np.isnan(sim).mean()
+
         axis = fig.subplots(1, 1)
 
         im = axis.imshow(
@@ -703,7 +709,7 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         axis.axvline(sr, color="k", ls="--", lw=1)
         axis.axvline(ss, color="k", ls="--", lw=1)
 
-        title = _format_title(rev, LSD)
+        title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
 
@@ -739,7 +745,9 @@ def plotFactMask(rev, LSD):
         cmap="binary",
         aspect="auto",
         interpolation="nearest",
+        label=f"factorized mask: {100.0 * mask.mean():.2f}% masked",
     )
+
     # Overlay the full mask if it exists
     if "rfm" in locals():
         axis.imshow(
@@ -749,6 +757,7 @@ def plotFactMask(rev, LSD):
             aspect="auto",
             alpha=0.5,
             interpolation="nearest",
+            label=f"daily mask: {100.0 * rfm.mean():.2f}% masked",
         )
 
     # Set the colorbar and axes
@@ -761,6 +770,10 @@ def plotFactMask(rev, LSD):
     title = _format_title(rev, LSD)
     axis.set_title(title, fontsize=20)
     _ = axis.set_xticks(np.arange(0, 361, 45))
+
+    # Add the legend
+    h1, l1 = axis.get_legend_handles_labels()
+    fig.legend(h1, l1, loc=1)
 
 
 # ========================================================================
