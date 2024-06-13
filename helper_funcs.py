@@ -21,7 +21,7 @@ from caput import time as ctime
 from draco.core import containers
 from draco.util import tools
 from draco.analysis.sidereal import _search_nearest
-from ch_util import ephemeris, rfi
+from ch_util import cal_utils, ephemeris, rfi
 from chimedb import core, dataflag as df
 
 eph = ephemeris.skyfield_wrapper.ephemeris
@@ -31,7 +31,7 @@ sf_obs = chime_obs.skyfield_obs()
 
 # ==== Plot color defaults ====
 _BAD_VALUE_COLOR = "#1a1a1a"
-
+_SOURCES = ["sun", "moon", "CAS_A", "CYG_A", "TAU_A", "VIR_A", "B0329+54"]
 
 # ==== Locations and helper functions for loading files ====
 
@@ -426,10 +426,18 @@ def events(observer, lsd):
 
     u2l = observer.unix_to_lsd
 
-    t = observer.transit_times(eph["sun"], st, et)
+    sources = [src for src in _SOURCES if src not in {"sun", "moon"}]
 
-    if len(t):
-        e["sun_transit"] = u2l(t)[0]
+    bodies = {src: ephemeris.source_dictionary[src] for src in sources}
+    bodies["moon"] = eph["moon"]
+
+    # Sun is handled differently because we care about rise/set
+    # rather than just transit
+
+    tt = observer.transit_times(eph["sun"], st, et)
+
+    if tt:
+        e["sun_transit"] = u2l(tt[0])
 
     # Calculate the sun rise/set times on this sidereal day (it's not clear to me there
     # is exactly one of each per day, I think not (Richard))
@@ -440,11 +448,36 @@ def events(observer, lsd):
         else:
             e["sun_set"] = u2l(t)
 
-    moon_time, moon_dec = observer.transit_times(eph["moon"], st, et, return_dec=True)
+    for name, body in bodies.items():
 
-    if len(moon_time):
-        e["lunar_transit"] = u2l(moon_time[0])
-        e["lunar_dec"] = moon_dec[0]
+        tt = observer.transit_times(body, st, et)
+
+        if tt:
+            tt = tt[0]
+        else:
+            continue
+
+        sf_time = ephemeris.unix_to_skyfield_time(tt)
+        pos = observer.skyfield_obs().at(sf_time).observe(body)
+
+        alt = pos.apparent().altaz()[0]
+        dec = pos.cirs_radec(sf_time)[1]
+
+        e[f"{name}_dec"] = dec.degrees
+
+        # Make sure body is above the horizon
+        if alt.radians > 0.0:
+            # Estimate the amount of time that the body is in the primary
+            # beam to 2 sigma
+            window_deg = 2.0 * cal_utils.guess_fwhm(
+                800.0, pol="X", dec=dec.radians, sigma=True
+            )
+            window_sec = window_deg * 240.0 * ephemeris.SIDEREAL_S
+
+            # Enter the transit timings in the output dict
+            e[f"{name}_transit"] = u2l(tt)
+            e[f"{name}_transit_start"] = u2l(tt - window_sec)
+            e[f"{name}_transit_end"] = u2l(tt + window_sec)
 
     return e
 
@@ -491,6 +524,28 @@ def _mask_flags(times, LSD):
         flag_mask[(times > ca) & (times < cb)] = True
 
     return flag_mask
+
+
+def _highlight_sources(LSD, axobj, sources=_SOURCES, obs=chime_obs):
+    """Add shaded regions over source objects."""
+    ev = events(obs, LSD)
+
+    for src in sources:
+        if src == "sun":
+            start = (ev[f"{src}_rise"] % 1) * 360.0
+            finish = (ev[f"{src}_set"] % 1) * 360.0
+        else:
+            start = (ev[f"{src}_transit_start"] % 1) * 360.0
+            finish = (ev[f"{src}_transit_end"] % 1) * 360.0
+
+        if start < finish:
+            axobj.axvspan(start, finish, color="grey", alpha=0.4)
+        else:
+            axobj.axvspan(0, finish, color="grey", alpha=0.4)
+            axobj.axvspan(start, 360, color="grey", alpha=0.4)
+
+        axobj.axvline(start, color="k", ls="--", lw=1)
+        axobj.axvline(finish, color="k", ls="--", lw=1)
 
 
 @_fail_quietly
@@ -545,20 +600,8 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         axis.set_xlabel("RA [deg]", fontsize=30)
         axis.set_ylabel("Freq [MHz]", fontsize=30)
 
-        # Calculate events like solar transit, rise ...
-        ev = events(chime_obs, LSD)
-        # Highlight the day time data
-        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-
-        if sr < ss:
-            axis.axvspan(sr, ss, color="grey", alpha=0.4)
-        else:
-            axis.axvspan(0, ss, color="grey", alpha=0.4)
-            axis.axvspan(sr, 360, color="grey", alpha=0.4)
-
-        axis.axvline(sr, color="k", ls="--", lw=1)
-        axis.axvline(ss, color="k", ls="--", lw=1)
+        # Highlight relevant sources
+        _highlight_sources(LSD, axis, ["sun"])
 
         title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
         axis.set_title(title, fontsize=50)
@@ -623,20 +666,8 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         axis.set_xlabel("RA [deg]", fontsize=30)
         axis.set_ylabel("Freq [MHz]", fontsize=30)
 
-        # Calculate events like solar transit, rise ...
-        ev = events(chime_obs, LSD)
-        # Highlight the day time data
-        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-
-        if sr < ss:
-            axis.axvspan(sr, ss, color="grey", alpha=0.4)
-        else:
-            axis.axvspan(0, ss, color="grey", alpha=0.4)
-            axis.axvspan(sr, 360, color="grey", alpha=0.4)
-
-        axis.axvline(sr, color="k", ls="--", lw=1)
-        axis.axvline(ss, color="k", ls="--", lw=1)
+        # Highlight relevant sources
+        _highlight_sources(LSD, axis)
 
         title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
         axis.set_title(title, fontsize=50)
@@ -695,20 +726,9 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         axis.set_xlabel("RA [deg]", fontsize=30)
         axis.set_ylabel("Freq [MHz]", fontsize=30)
 
-        # Calculate events like solar transit, rise ...
-        ev = events(chime_obs, LSD)
-        # Highlight the day time data
-        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-
-        if sr < ss:
-            axis.axvspan(sr, ss, color="grey", alpha=0.4)
-        else:
-            axis.axvspan(0, ss, color="grey", alpha=0.4)
-            axis.axvspan(sr, 360, color="grey", alpha=0.4)
-
-        axis.axvline(sr, color="k", ls="--", lw=1)
-        axis.axvline(ss, color="k", ls="--", lw=1)
+        # Highlight relevant sources
+        sources = ["sun", "CAS_A", "CYG_A"]
+        _highlight_sources(LSD, axis, sources)
 
         title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
         axis.set_title(title, fontsize=50)
@@ -805,8 +825,6 @@ def plotFactMask(rev, LSD):
     _ = axis.set_xticks(np.arange(0, 361, 45))
 
     # Add the legend
-    box = axis.get_position()
-    # axis.set_position([box.x0, box.y0, box.width, box.height * 1.0])
     axis.legend(
         handles=patches,
         loc=1,
@@ -1074,13 +1092,11 @@ def circle(ax, x, y, radius, **kwargs):
     -------
     circle : Artist
     """
-    from matplotlib import patches
-
     fig = ax.figure
     trans = fig.dpi_scale_trans + matplotlib.transforms.ScaledTranslation(
         x, y, ax.transData
     )
-    circle = patches.Circle((0, 0), radius, transform=trans, **kwargs)
+    circle = mpatches.Circle((0, 0), radius, transform=trans, **kwargs)
 
     # Draw circle
     return ax.add_artist(circle)
@@ -1276,9 +1292,9 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     )
 
     # Put a ring around the location of the moon if it transits on this day
-    if "lunar_transit" in ev:
-        lunar_ra = (ev["lunar_transit"] % 1) * 360.0
-        lunar_za = np.sin(np.radians(ev["lunar_dec"] - 49.0))
+    if "moon_transit" in ev:
+        lunar_ra = (ev["moon_transit"] % 1) * 360.0
+        lunar_za = np.sin(np.radians(ev["moon_dec"] - 49.0))
         circle(axes[1], lunar_ra, lunar_za, radius=0.2, facecolor="none", edgecolor="k")
 
     # Highlight the day time data
