@@ -3,6 +3,7 @@ import copy
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
@@ -720,6 +721,14 @@ def plotFactMask(rev, LSD):
     fmask = containers.RFIMask.from_file(path)
 
     mask = fmask.mask[:]
+    mask = np.ma.masked_where(mask == 0, mask)
+
+    # Get the static mask that was active for this CSD
+    timestamp = ephemeris.csd_to_unix(fmask.attrs.get("csd", fmask.attrs.get("lsd")))
+    static_mask = np.zeros(mask.shape, mask.dtype)
+    static_mask |= rfi.frequency_mask(fmask.freq, timestamp=timestamp)[:, np.newaxis]
+    # Ensure that the static mask will be transparent anywhere that is not flagged
+    static_mask = np.ma.masked_where(static_mask == 0, static_mask)
 
     # Load all the RFI masks
     for name in {"stokesi_mask", "sens_mask", "chisq_mask"}:
@@ -735,35 +744,59 @@ def plotFactMask(rev, LSD):
             rfm = file.mask[:].copy()
 
     # Make the master figure
-    fig = plt.figure(layout="constrained", figsize=(15, 10))
+    fig = plt.figure(layout="constrained", figsize=(18, 15))
     axis = fig.subplots(1, 1)
 
-    # Plot the factorized mask
-    im = axis.imshow(
-        mask,
-        extent=(0, 360, 400, 800),
-        cmap="binary",
-        aspect="auto",
-        interpolation="nearest",
-        label=f"factorized mask: {100.0 * mask.mean():.2f}% masked",
-    )
+    patches = []
 
     # Overlay the full mask if it exists
     if "rfm" in locals():
+        cmap = matplotlib.colormaps["Reds"]
         axis.imshow(
             rfm,
             extent=(0, 360, 400, 800),
-            cmap="Reds",
+            cmap=cmap,
             aspect="auto",
-            alpha=0.5,
+            alpha=1.0,
             interpolation="nearest",
-            label=f"daily mask: {100.0 * rfm.mean():.2f}% masked",
         )
+        rfm_patch = mpatches.Patch(
+            color=cmap(cmap.N), label=f"daily mask: {100.0 * rfm.mean():.2f}% masked"
+        )
+        patches.append(rfm_patch)
 
-    # Set the colorbar and axes
-    divider = make_axes_locatable(axis)
-    cax = divider.append_axes("right", size="1.5%", pad=0.25)
-    fig.colorbar(im, cax=cax)
+    # Plot the factorized mask
+    cmap = matplotlib.colormaps["binary_r"]
+    axis.imshow(
+        mask,
+        extent=(0, 360, 400, 800),
+        cmap=cmap,
+        aspect="auto",
+        alpha=0.7,
+        interpolation="nearest",
+    )
+    mask_patch = mpatches.Patch(
+        color=cmap(0), label=f"factorized mask: {100.0 * mask.data.mean():.2f}% masked"
+    )
+    patches.append(mask_patch)
+
+    # Overlay the static mask
+    cmap = matplotlib.colormaps["Dark2_r"]
+    axis.imshow(
+        static_mask,
+        extent=(0, 360, 400, 800),
+        cmap=cmap,
+        aspect="auto",
+        alpha=1.0,
+        interpolation="nearest",
+    )
+    static_patch = mpatches.Patch(
+        color=cmap(0),
+        label=f"static mask: {100.0 * static_mask.data.mean():.2f}% masked",
+    )
+    patches.append(static_patch)
+
+    # Set the axes
     axis.set_xlabel("RA [deg]", fontsize=20)
     axis.set_ylabel("Freq [MHz]", fontsize=20)
 
@@ -772,8 +805,16 @@ def plotFactMask(rev, LSD):
     _ = axis.set_xticks(np.arange(0, 361, 45))
 
     # Add the legend
-    h1, l1 = axis.get_legend_handles_labels()
-    fig.legend(h1, l1, loc=1)
+    box = axis.get_position()
+    # axis.set_position([box.x0, box.y0, box.width, box.height * 1.0])
+    axis.legend(
+        handles=patches,
+        loc=1,
+        bbox_to_anchor=(1.0, -0.05),
+        fancybox=True,
+        ncol=2,
+        shadow=True,
+    )
 
 
 # ========================================================================
