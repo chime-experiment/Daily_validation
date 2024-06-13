@@ -127,9 +127,9 @@ def plotDS(
     rev,
     LSD,
     hpf=False,
-    clim=[[1e-3, 1e2], [1e-3, 1e-2]],
+    clim=[[1e-4, 1e0], [1e-3, 1e-2]],
     cmap="inferno",
-    dynamic_clim=True,
+    dynamic_clim=False,
 ):
     """
     Plots the delay spectrum for a given LSD.
@@ -223,7 +223,7 @@ def plotMultipleDS(
     num_days,
     reverse=True,
     hpf=False,
-    clim=[1e-3, 1e2],
+    clim=[1e-4, 1e0],
     cmap="inferno",
 ):
     """Plot multiple delay spectra in a given range.
