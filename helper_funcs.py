@@ -128,7 +128,7 @@ def plotDS(
     rev,
     LSD,
     hpf=False,
-    clim=[[1e-4, 1e0], [1e-3, 1e-2]],
+    clim=[[1e-4, 1e2], [1e-4, 1e-2]],
     cmap="inferno",
     dynamic_clim=False,
 ):
@@ -771,6 +771,8 @@ def plotFactMask(rev, LSD):
 
     # Overlay the full mask if it exists
     if "rfm" in locals():
+        # Include fully flagged regions
+        rfm |= _mask_flags(file.time, LSD)[np.newaxis]
         cmap = matplotlib.colormaps["Reds"]
         axis.imshow(
             rfm,
