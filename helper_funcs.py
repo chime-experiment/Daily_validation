@@ -95,6 +95,13 @@ def _format_title(rev, LSD):
     return f"rev_{int(rev):02d}, CSD {int(LSD):04d}"
 
 
+def _select_CSD_bounds(times, LSD, obs=chime_obs):
+    """Return indices representing the times found within the LSD"""
+    ra = obs.unix_to_lsd(times) - LSD
+
+    return (ra >= 0.0) & (ra < 1.0)
+
+
 # ==========================================================================
 
 
@@ -571,6 +578,11 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     sensrat_mask = sensrat * np.where(rfm == 0, 1, np.nan)
     sensrat_mask *= np.where(_mask_flags(sens.time, LSD), np.nan, 1)
 
+    # Select only the times that fall within the actual CSD
+    sel = _select_CSD_bounds(sens.time, LSD)
+    sensrat = sensrat[:, sel]
+    sensrat_mask = sensrat_mask[:, sel]
+
     cmap = copy.copy(matplotlib.cm.viridis)
     cmap.set_bad(_BAD_VALUE_COLOR)
 
@@ -638,6 +650,11 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     vis_mask = vis * np.where(chim == 0, 1, np.nan)
     vis_mask *= np.where(_mask_flags(chisq.time, LSD), np.nan, 1)
 
+    # Select only the times that fall within the actual CSD
+    sel = _select_CSD_bounds(chisq.time, LSD)
+    vis = vis[:, sel]
+    vis_mask = vis_mask[:, sel]
+
     cmap = copy.copy(matplotlib.cm.viridis)
     cmap.set_bad(_BAD_VALUE_COLOR)
 
@@ -696,6 +713,11 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     # Apply the full mask
     vis_mask = vis * np.where(rfm == 0, 1, np.nan)
     vis_mask *= np.where(_mask_flags(power.time, LSD), np.nan, 1)
+
+    # Select only the times that fall within the actual CSD
+    sel = _select_CSD_bounds(power.time, LSD)
+    vis = vis[:, sel]
+    vis_mask = vis_mask[:, sel]
 
     cmap = copy.copy(matplotlib.cm.viridis)
     cmap.set_bad(_BAD_VALUE_COLOR)
@@ -773,6 +795,10 @@ def plotFactMask(rev, LSD):
     if "rfm" in locals():
         # Include fully flagged regions
         rfm |= _mask_flags(file.time, LSD)[np.newaxis]
+        # Trim the padded time regions
+        sel = _select_CSD_bounds(file.time, LSD)
+        rfm = rfm[:, sel]
+
         cmap = matplotlib.colormaps["Reds"]
         axis.imshow(
             rfm,
