@@ -1,6 +1,8 @@
 {% extends "base.html.j2" %}
-{% block title %}CSD {{ csd }}{% endblock %}
+{% block title %}CSD {{ csd }}, revision {{ rev }}{% endblock %}
 {% block headmatter %}<script type="text/javascript">
+var rev = {{ rev }};
+var revisions = {{ revisions }};
 var csd = {{ csd }};
 var first_csd = {{ first_csd }};
 var pno_csd = {{ pno_csd }};
@@ -8,7 +10,6 @@ var prev_csd = {{ prev_csd }};
 var next_csd = {{ next_csd }};
 var nno_csd = {{ nno_csd }};
 var last_csd = {{ last_csd }};
-var csd_list = {{ csd_list }};
 var opinions = {{ opinions }};
 </script>
 {% endblock %}
@@ -23,24 +24,29 @@ var opinions = {{ opinions }};
 <button id="button_first" title="First CSD" onclick="set_csd(first_csd)"{% if csd == first_csd %} disabled{% endif %}><svg viewBox="0 0 24 24"><path d="M2 0 V24 H6 V12 L14 24 H22 L14 12 L22 0 H14 L6 12 V0 Z "/></svg></button>
 <button id="button_pno" title="Previous CSD with no opinion" onclick="set_csd(pno_csd)"{% if pno_csd == 0 %} disabled{% endif %}><svg viewBox="0 0 24 24"><path d="M6 0 L0 12 L6 24 H14 L8 12 L14 0 Z M16 0 L10 12 L16 24 H24 L18 12 L24 0 Z"/></svg></button>
 <button id="button_prev" title="Previous CSD" onclick="set_csd(prev_csd)"{% if prev_csd == 0 %} disabled{% endif %}><svg viewBox="0 0 24 24"><path d="M10 0 L4 12 L10 24 H18 L12 12 L18 0 Z"/></svg></button>
-<input id="CSD" type="text" value="{{ csd }}" onchange="vet_csd()"></ul>
+<input id="CSD" type="text" value="{{ csd }}" onchange="set_csd(document.getElementById('CSD').value)"></ul>
 <button id="button_next" title="Next CSD" onclick="set_csd(next_csd)"{% if next_csd == 0 %} disabled{% endif %}><svg viewBox="0 0 24 24"><path d="M14 0 L20 12 L14 24 H6 L12 12 L6 0 Z"/></svg></button>
 <button id="button_nno" title="Next CSD with no opinion" onclick="set_csd(nno_csd)"{% if nno_csd == 0 %} disabled{% endif %}><svg viewBox="0 0 24 24"><path d="M18 0 L24 12 L18 24 H10 L16 12 L10 0 Z M8 0 L14 12 L8 24 H0 L6 12 L0 0 Z"/></svg></button>
 <button id="button_last" title="Last CSD" onclick="set_csd(last_csd)"{% if csd == last_csd %} disabled{% endif %}><svg viewBox="0 0 24 24"><path d="M22 0 V24 H18 V12 L10 24 H2 L10 12 L2 0 H10 L18 12 V0 Z "/></svg></button>
 </div>
+<br><span class="pickrev-span">Revision:</span>
+{%- for pickrev in revisions %}
+<button class="pickrev{% if pickrev == rev %} pickrev-selected{%- endif %} {% if pickrev in opinions
+%}pickrev-{{ opinions[pickrev].decision | d("missing") }}"{% else %}pickrev-missing" disabled{% endif %} id="pickrev-{{ pickrev }}" onclick="set_rev({{ pickrev }})">{{ pickrev }}</button>
+{% endfor %}
 </div>
 <div class="vote">
-<H2 id="opinion-h2">Opinion for CSD #{{ csd }}</H2>
+<H2 id="opinion-h2">Opinion for CSD #{{ csd }}, rev {{rev}}</H2>
 <button type="Submit" onclick="submit_opinion()">Submit</button>
-<span id="opinion-count">{{ opinion_count }} existing votes</span>
+<span id="opinion-count">{{ opinions[rev].count }} existing votes</span>
 <div class="opinion-select">
-<input type="radio" id="opinion-none" name="opinion" onclick="set_disable('opinion-notes', true)" value="none"{% if csd_decision == "none" %} checked{% endif %}><label for="opinion-none">None</label>
-<input type="radio" id="opinion-bad" name="opinion" onclick="set_disable('opinion-notes', false)" value="bad"{% if csd_decision == "bad" %} checked{% endif %}><label for="opinion-bad">Bad</label>
-<input type="radio" id="opinion-unsure" name="opinion" onclick="set_disable('opinion-notes', false)" value="unsure"{% if csd_decision == "unsure" %} checked{% endif %}><label for="opinion-unsure">Unsure</label>
-<input type="radio" id="opinion-good" name="opinion" onclick="set_disable('opinion-notes', false)" value="good"{% if csd_decision == "good" %} checked{% endif %}><label for="opinion-good">Good</label>
+<input type="radio" id="opinion-none" name="opinion" onclick="set_disable('opinion-notes', true)" value="none"{% if opinions[rev].decision == "none" %} checked{% endif %}><label for="opinion-none">None</label>
+<input type="radio" id="opinion-bad" name="opinion" onclick="set_disable('opinion-notes', false)" value="bad"{% if opinions[rev].decision == "bad" %} checked{% endif %}><label for="opinion-bad">Bad</label>
+<input type="radio" id="opinion-unsure" name="opinion" onclick="set_disable('opinion-notes', false)" value="unsure"{% if opinions[rev].decision == "unsure" %} checked{% endif %}><label for="opinion-unsure">Unsure</label>
+<input type="radio" id="opinion-good" name="opinion" onclick="set_disable('opinion-notes', false)" value="good"{% if opinions[rev].decision == "good" %} checked{% endif %}><label for="opinion-good">Good</label>
 </div>
 <label for="opinion-notes">Notes:</label><br/>
-<textarea id="opinion-notes" name="notes" rows="6" cols="80" placeholder="Opinion notes"{% if csd_decision == "none" %} disabled{% endif %}>{{ csd_notes | d("") }}</textarea>
+<textarea id="opinion-notes" name="notes" rows="6" cols="80" placeholder="Opinion notes"{% if opinions[rev].decision == "none" %} disabled{% endif %}>{{ opinions[rev].notes | d("") }}</textarea>
 </div>
 {% endblock %}
-{% block iframesrc %}view?fetch=rev07_{{ csd }}{% endblock %}
+{% block iframesrc %}view?render=rev{{ "%02d" % rev }}_{{ csd }}{% endblock %}
