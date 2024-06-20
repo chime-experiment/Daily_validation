@@ -48,6 +48,7 @@ _file_spec = {
     "chisq_mask": ("rfi_mask_chisq_", ".h5"),
     "stokesi_mask": ("rfi_mask_stokesi_", ".h5"),
     "sens_mask": ("rfi_mask_sensitivity_", ".h5"),
+    "freq_mask": ("rfi_mask_freq_", ".h5"),
     "fact_mask": ("rfi_mask_factorized_", ".h5"),
     "sourceflux": ("sourceflux_", "_bright.h5"),
 }
@@ -628,7 +629,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
 
     # Load all input masks
     rfm = np.zeros(vis.shape, dtype=bool)
-    for name in {"stokesi_mask", "sens_mask"}:
+    for name in {"stokesi_mask", "sens_mask", "freq_mask"}:
         rfi_path = _get_rev_path(name, rev, LSD)
         try:
             file = containers.RFIMask.from_file(rfi_path)
@@ -773,7 +774,7 @@ def plotFactMask(rev, LSD):
     static_mask = np.ma.masked_where(static_mask == 0, static_mask)
 
     # Load all the RFI masks
-    for name in {"stokesi_mask", "sens_mask", "chisq_mask"}:
+    for name in {"stokesi_mask", "sens_mask", "chisq_mask", "freq_mask"}:
         rfi_path = _get_rev_path(name, rev, LSD)
         try:
             file = containers.RFIMask.from_file(rfi_path)
