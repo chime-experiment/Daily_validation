@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, ListedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
 from skyfield import almanac
@@ -854,7 +854,7 @@ def plotFactMask(rev, LSD):
         sel = _select_CSD_bounds(file.time, LSD)
         rfm = rfm[:, sel]
 
-        cmap = matplotlib.colormaps["Reds"]
+        cmap = ListedColormap(["white", "tab:pink"])
         axis.imshow(
             rfm,
             extent=(0, 360, 400, 800),
@@ -875,7 +875,7 @@ def plotFactMask(rev, LSD):
         extent=(0, 360, 400, 800),
         cmap=cmap,
         aspect="auto",
-        alpha=0.7,
+        alpha=0.6,
         interpolation="nearest",
     )
     mask_patch = mpatches.Patch(
