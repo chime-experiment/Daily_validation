@@ -23,6 +23,7 @@ from draco.util import tools
 from draco.analysis.sidereal import _search_nearest
 from ch_util import cal_utils, ephemeris, rfi
 from chimedb import core, dataflag as df
+from ch_pipeline.analysis.flagging import compute_cumulative_rainfall
 
 eph = ephemeris.skyfield_wrapper.ephemeris
 chime_obs = ephemeris.chime
@@ -916,6 +917,44 @@ def plotFactMask(rev, LSD):
         ncol=2,
         shadow=True,
     )
+
+
+@_fail_quietly
+def plot_rainfall(rev, LSD):
+    # Plot cumulative rainfall throughout the day
+    start_time = ephemeris.csd_to_unix(LSD)
+    finish_time = ephemeris.csd_to_unix(LSD + 1)
+
+    times = np.linspace(start_time, finish_time, 4096, endpoint=False)
+
+    rain = compute_cumulative_rainfall(times)
+
+    fig = plt.figure(layout="constrained", figsize=(18, 5))
+    axis = fig.subplots(1, 1)
+
+    axis.plot(
+        np.linspace(0, 360, 4096, endpoint=False),
+        rain,
+        color="tab:blue",
+        marker=".",
+        ls=":",
+        label="cumulative rainfall",
+    )
+    axis.axhline(1.0, color="tab:red", ls="-", label="flagging threshold")
+
+    axis.set_xbound(0, 360)
+
+    if np.all(rain == 0):
+        axis.set_ybound(0, 2)
+
+    # Set labels
+    axis.set_xlabel("RA [deg]", fontsize=20)
+    axis.set_ylabel("Cumulative rainfall [mm]", fontsize=20)
+
+    title = _format_title(rev, LSD)
+    axis.set_title(title, fontsize=20)
+
+    axis.legend(fancybox=True, ncol=2, shadow=True)
 
 
 # ========================================================================
