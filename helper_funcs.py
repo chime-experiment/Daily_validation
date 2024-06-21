@@ -3,7 +3,8 @@ import copy
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+import matplotlib.patches as mpatches
+from matplotlib.colors import LogNorm, ListedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pathlib import Path
 from skyfield import almanac
@@ -20,8 +21,9 @@ from caput import time as ctime
 from draco.core import containers
 from draco.util import tools
 from draco.analysis.sidereal import _search_nearest
-from ch_util import ephemeris, rfi
+from ch_util import cal_utils, ephemeris, rfi
 from chimedb import core, dataflag as df
+from ch_pipeline.analysis.flagging import compute_cumulative_rainfall
 
 eph = ephemeris.skyfield_wrapper.ephemeris
 chime_obs = ephemeris.chime
@@ -30,7 +32,7 @@ sf_obs = chime_obs.skyfield_obs()
 
 # ==== Plot color defaults ====
 _BAD_VALUE_COLOR = "#1a1a1a"
-
+_SOURCES = ["sun", "moon", "CAS_A", "CYG_A", "TAU_A", "VIR_A", "B0329+54"]
 
 # ==== Locations and helper functions for loading files ====
 
@@ -47,6 +49,7 @@ _file_spec = {
     "chisq_mask": ("rfi_mask_chisq_", ".h5"),
     "stokesi_mask": ("rfi_mask_stokesi_", ".h5"),
     "sens_mask": ("rfi_mask_sensitivity_", ".h5"),
+    "freq_mask": ("rfi_mask_freq_", ".h5"),
     "fact_mask": ("rfi_mask_factorized_", ".h5"),
     "sourceflux": ("sourceflux_", "_bright.h5"),
 }
@@ -94,6 +97,13 @@ def _format_title(rev, LSD):
     return f"rev_{int(rev):02d}, CSD {int(LSD):04d}"
 
 
+def _select_CSD_bounds(times, LSD, obs=chime_obs):
+    """Return indices representing the times found within the LSD"""
+    ra = obs.unix_to_lsd(times) - LSD
+
+    return (ra >= 0.0) & (ra < 1.0)
+
+
 # ==========================================================================
 
 
@@ -127,9 +137,9 @@ def plotDS(
     rev,
     LSD,
     hpf=False,
-    clim=[[1e-3, 1e2], [1e-3, 1e-2]],
+    clim=[[1e-4, 1e2], [1e-4, 1e-2]],
     cmap="inferno",
-    dynamic_clim=True,
+    dynamic_clim=False,
 ):
     """
     Plots the delay spectrum for a given LSD.
@@ -223,7 +233,7 @@ def plotMultipleDS(
     num_days,
     reverse=True,
     hpf=False,
-    clim=[1e-3, 1e2],
+    clim=[1e-4, 1e0],
     cmap="inferno",
 ):
     """Plot multiple delay spectra in a given range.
@@ -425,10 +435,18 @@ def events(observer, lsd):
 
     u2l = observer.unix_to_lsd
 
-    t = observer.transit_times(eph["sun"], st, et)
+    sources = [src for src in _SOURCES if src not in {"sun", "moon"}]
 
-    if len(t):
-        e["sun_transit"] = u2l(t)[0]
+    bodies = {src: ephemeris.source_dictionary[src] for src in sources}
+    bodies["moon"] = eph["moon"]
+
+    # Sun is handled differently because we care about rise/set
+    # rather than just transit
+
+    tt = observer.transit_times(eph["sun"], st, et)
+
+    if tt:
+        e["sun_transit"] = u2l(tt[0])
 
     # Calculate the sun rise/set times on this sidereal day (it's not clear to me there
     # is exactly one of each per day, I think not (Richard))
@@ -439,11 +457,36 @@ def events(observer, lsd):
         else:
             e["sun_set"] = u2l(t)
 
-    moon_time, moon_dec = observer.transit_times(eph["moon"], st, et, return_dec=True)
+    for name, body in bodies.items():
 
-    if len(moon_time):
-        e["lunar_transit"] = u2l(moon_time[0])
-        e["lunar_dec"] = moon_dec[0]
+        tt = observer.transit_times(body, st, et)
+
+        if tt:
+            tt = tt[0]
+        else:
+            continue
+
+        sf_time = ephemeris.unix_to_skyfield_time(tt)
+        pos = observer.skyfield_obs().at(sf_time).observe(body)
+
+        alt = pos.apparent().altaz()[0]
+        dec = pos.cirs_radec(sf_time)[1]
+
+        e[f"{name}_dec"] = dec.degrees
+
+        # Make sure body is above the horizon
+        if alt.radians > 0.0:
+            # Estimate the amount of time that the body is in the primary
+            # beam to 2 sigma
+            window_deg = 2.0 * cal_utils.guess_fwhm(
+                800.0, pol="X", dec=dec.radians, sigma=True
+            )
+            window_sec = window_deg * 240.0 * ephemeris.SIDEREAL_S
+
+            # Enter the transit timings in the output dict
+            e[f"{name}_transit"] = u2l(tt)
+            e[f"{name}_transit_start"] = u2l(tt - window_sec)
+            e[f"{name}_transit_end"] = u2l(tt + window_sec)
 
     return e
 
@@ -492,6 +535,28 @@ def _mask_flags(times, LSD):
     return flag_mask
 
 
+def _highlight_sources(LSD, axobj, sources=_SOURCES, obs=chime_obs):
+    """Add shaded regions over source objects."""
+    ev = events(obs, LSD)
+
+    for src in sources:
+        if src == "sun":
+            start = (ev[f"{src}_rise"] % 1) * 360.0
+            finish = (ev[f"{src}_set"] % 1) * 360.0
+        else:
+            start = (ev[f"{src}_transit_start"] % 1) * 360.0
+            finish = (ev[f"{src}_transit_end"] % 1) * 360.0
+
+        if start < finish:
+            axobj.axvspan(start, finish, color="grey", alpha=0.4)
+        else:
+            axobj.axvspan(0, finish, color="grey", alpha=0.4)
+            axobj.axvspan(start, 360, color="grey", alpha=0.4)
+
+        axobj.axvline(start, color="k", ls="--", lw=1)
+        axobj.axvline(finish, color="k", ls="--", lw=1)
+
+
 @_fail_quietly
 def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     path = _get_rev_path("sensitivity", rev, LSD)
@@ -515,6 +580,11 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     sensrat_mask = sensrat * np.where(rfm == 0, 1, np.nan)
     sensrat_mask *= np.where(_mask_flags(sens.time, LSD), np.nan, 1)
 
+    # Select only the times that fall within the actual CSD
+    sel = _select_CSD_bounds(sens.time, LSD)
+    sensrat = sensrat[:, sel]
+    sensrat_mask = sensrat_mask[:, sel]
+
     cmap = copy.copy(matplotlib.cm.viridis)
     cmap.set_bad(_BAD_VALUE_COLOR)
 
@@ -523,7 +593,15 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    for fig, sim in zip(subfigs, (sensrat, sensrat_mask)):
+    # Make label patches for the masked plot
+    mask_patch = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"sensitivity mask: {100.0 * np.isnan(sensrat_mask).mean():.2f}% masked",
+    )
+
+    patches = [None, mask_patch]
+
+    for ii, (fig, sim) in enumerate(zip(subfigs, (sensrat, sensrat_mask))):
 
         axis = fig.subplots(1, 1)
 
@@ -542,24 +620,22 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         axis.set_xlabel("RA [deg]", fontsize=30)
         axis.set_ylabel("Freq [MHz]", fontsize=30)
 
-        # Calculate events like solar transit, rise ...
-        ev = events(chime_obs, LSD)
-        # Highlight the day time data
-        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-
-        if sr < ss:
-            axis.axvspan(sr, ss, color="grey", alpha=0.4)
-        else:
-            axis.axvspan(0, ss, color="grey", alpha=0.4)
-            axis.axvspan(sr, 360, color="grey", alpha=0.4)
-
-        axis.axvline(sr, color="k", ls="--", lw=1)
-        axis.axvline(ss, color="k", ls="--", lw=1)
+        # Highlight relevant sources
+        _highlight_sources(LSD, axis, ["sun"])
 
         title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+
+        # If there is a patch, add a legend
+        if patches[ii] is not None:
+            axis.legend(
+                handles=[patches[ii]],
+                loc=1,
+                bbox_to_anchor=(1.0, -0.05),
+                fancybox=True,
+                shadow=True,
+            )
 
 
 def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
@@ -570,7 +646,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
 
     # Load all input masks
     rfm = np.zeros(vis.shape, dtype=bool)
-    for name in {"stokesi_mask", "sens_mask"}:
+    for name in {"stokesi_mask", "sens_mask", "freq_mask"}:
         rfi_path = _get_rev_path(name, rev, LSD)
         try:
             file = containers.RFIMask.from_file(rfi_path)
@@ -592,6 +668,11 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     vis_mask = vis * np.where(chim == 0, 1, np.nan)
     vis_mask *= np.where(_mask_flags(chisq.time, LSD), np.nan, 1)
 
+    # Select only the times that fall within the actual CSD
+    sel = _select_CSD_bounds(chisq.time, LSD)
+    vis = vis[:, sel]
+    vis_mask = vis_mask[:, sel]
+
     cmap = copy.copy(matplotlib.cm.viridis)
     cmap.set_bad(_BAD_VALUE_COLOR)
 
@@ -600,7 +681,18 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     # Make the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    for fig, sim in zip(subfigs, (vis, vis_mask)):
+    # Make label patches for the different masks
+    patch1 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"all masks: {100.0 * np.isnan(vis).mean():.2f}% masked",
+    )
+    patch2 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"full pipeline mask (all masks and chi-squared mask): {100.0 * np.isnan(vis_mask).mean():.2f}% masked",
+    )
+    patches = [patch1, patch2]
+
+    for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
 
@@ -618,24 +710,22 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         axis.set_xlabel("RA [deg]", fontsize=30)
         axis.set_ylabel("Freq [MHz]", fontsize=30)
 
-        # Calculate events like solar transit, rise ...
-        ev = events(chime_obs, LSD)
-        # Highlight the day time data
-        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-
-        if sr < ss:
-            axis.axvspan(sr, ss, color="grey", alpha=0.4)
-        else:
-            axis.axvspan(0, ss, color="grey", alpha=0.4)
-            axis.axvspan(sr, 360, color="grey", alpha=0.4)
-
-        axis.axvline(sr, color="k", ls="--", lw=1)
-        axis.axvline(ss, color="k", ls="--", lw=1)
+        # Highlight relevant sources
+        _highlight_sources(LSD, axis)
 
         title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+
+        # If there is a patch, add a legend
+        if patches[ii] is not None:
+            axis.legend(
+                handles=[patches[ii]],
+                loc=1,
+                bbox_to_anchor=(1.0, -0.05),
+                fancybox=True,
+                shadow=True,
+            )
 
 
 @_fail_quietly
@@ -661,6 +751,11 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     vis_mask = vis * np.where(rfm == 0, 1, np.nan)
     vis_mask *= np.where(_mask_flags(power.time, LSD), np.nan, 1)
 
+    # Select only the times that fall within the actual CSD
+    sel = _select_CSD_bounds(power.time, LSD)
+    vis = vis[:, sel]
+    vis_mask = vis_mask[:, sel]
+
     cmap = copy.copy(matplotlib.cm.viridis)
     cmap.set_bad(_BAD_VALUE_COLOR)
 
@@ -669,7 +764,18 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    for fig, sim in zip(subfigs, (vis, vis_mask)):
+    # Make label patches for the different masks
+    patch1 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"stokes I high-pass filter mask: {100.0 * np.isnan(vis).mean():.2f}% masked",
+    )
+    patch2 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"stokes I high-pass filter and sumthreshold masks: {100.0 * np.isnan(vis_mask).mean():.2f}% masked",
+    )
+    patches = [patch1, patch2]
+
+    for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
 
@@ -688,24 +794,23 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         axis.set_xlabel("RA [deg]", fontsize=30)
         axis.set_ylabel("Freq [MHz]", fontsize=30)
 
-        # Calculate events like solar transit, rise ...
-        ev = events(chime_obs, LSD)
-        # Highlight the day time data
-        sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-        ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-
-        if sr < ss:
-            axis.axvspan(sr, ss, color="grey", alpha=0.4)
-        else:
-            axis.axvspan(0, ss, color="grey", alpha=0.4)
-            axis.axvspan(sr, 360, color="grey", alpha=0.4)
-
-        axis.axvline(sr, color="k", ls="--", lw=1)
-        axis.axvline(ss, color="k", ls="--", lw=1)
+        # Highlight relevant sources
+        sources = ["sun", "CAS_A", "CYG_A"]
+        _highlight_sources(LSD, axis, sources)
 
         title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+
+        # If there is a patch, add a legend
+        if patches[ii] is not None:
+            axis.legend(
+                handles=[patches[ii]],
+                loc=1,
+                bbox_to_anchor=(1.0, -0.05),
+                fancybox=True,
+                shadow=True,
+            )
 
 
 @_fail_quietly
@@ -714,9 +819,17 @@ def plotFactMask(rev, LSD):
     fmask = containers.RFIMask.from_file(path)
 
     mask = fmask.mask[:]
+    mask = np.ma.masked_where(mask == 0, mask)
+
+    # Get the static mask that was active for this CSD
+    timestamp = ephemeris.csd_to_unix(fmask.attrs.get("csd", fmask.attrs.get("lsd")))
+    static_mask = np.zeros(mask.shape, mask.dtype)
+    static_mask |= rfi.frequency_mask(fmask.freq, timestamp=timestamp)[:, np.newaxis]
+    # Ensure that the static mask will be transparent anywhere that is not flagged
+    static_mask = np.ma.masked_where(static_mask == 0, static_mask)
 
     # Load all the RFI masks
-    for name in {"stokesi_mask", "sens_mask", "chisq_mask"}:
+    for name in {"stokesi_mask", "sens_mask", "chisq_mask", "freq_mask"}:
         rfi_path = _get_rev_path(name, rev, LSD)
         try:
             file = containers.RFIMask.from_file(rfi_path)
@@ -729,38 +842,119 @@ def plotFactMask(rev, LSD):
             rfm = file.mask[:].copy()
 
     # Make the master figure
-    fig = plt.figure(layout="constrained", figsize=(15, 10))
+    fig = plt.figure(layout="constrained", figsize=(18, 15))
     axis = fig.subplots(1, 1)
 
-    # Plot the factorized mask
-    im = axis.imshow(
-        mask,
-        extent=(0, 360, 400, 800),
-        cmap="binary",
-        aspect="auto",
-        interpolation="nearest",
-    )
+    patches = []
+
     # Overlay the full mask if it exists
     if "rfm" in locals():
+        # Include fully flagged regions
+        rfm |= _mask_flags(file.time, LSD)[np.newaxis]
+        # Trim the padded time regions
+        sel = _select_CSD_bounds(file.time, LSD)
+        rfm = rfm[:, sel]
+
+        cmap = ListedColormap(["white", "tab:pink"])
         axis.imshow(
             rfm,
             extent=(0, 360, 400, 800),
-            cmap="Reds",
+            cmap=cmap,
             aspect="auto",
-            alpha=0.5,
+            alpha=1.0,
             interpolation="nearest",
         )
+        rfm_patch = mpatches.Patch(
+            color=cmap(cmap.N), label=f"daily mask: {100.0 * rfm.mean():.2f}% masked"
+        )
+        patches.append(rfm_patch)
 
-    # Set the colorbar and axes
-    divider = make_axes_locatable(axis)
-    cax = divider.append_axes("right", size="1.5%", pad=0.25)
-    fig.colorbar(im, cax=cax)
+    # Plot the factorized mask
+    cmap = matplotlib.colormaps["binary_r"]
+    axis.imshow(
+        mask,
+        extent=(0, 360, 400, 800),
+        cmap=cmap,
+        aspect="auto",
+        alpha=0.6,
+        interpolation="nearest",
+    )
+    mask_patch = mpatches.Patch(
+        color=cmap(0), label=f"factorized mask: {100.0 * mask.data.mean():.2f}% masked"
+    )
+    patches.append(mask_patch)
+
+    # Overlay the static mask
+    cmap = matplotlib.colormaps["Dark2_r"]
+    axis.imshow(
+        static_mask,
+        extent=(0, 360, 400, 800),
+        cmap=cmap,
+        aspect="auto",
+        alpha=1.0,
+        interpolation="nearest",
+    )
+    static_patch = mpatches.Patch(
+        color=cmap(0),
+        label=f"static mask: {100.0 * static_mask.data.mean():.2f}% masked",
+    )
+    patches.append(static_patch)
+
+    # Set the axes
     axis.set_xlabel("RA [deg]", fontsize=20)
     axis.set_ylabel("Freq [MHz]", fontsize=20)
 
     title = _format_title(rev, LSD)
     axis.set_title(title, fontsize=20)
     _ = axis.set_xticks(np.arange(0, 361, 45))
+
+    # Add the legend
+    axis.legend(
+        handles=patches,
+        loc=1,
+        bbox_to_anchor=(1.0, -0.05),
+        fancybox=True,
+        ncol=2,
+        shadow=True,
+    )
+
+
+@_fail_quietly
+def plot_rainfall(rev, LSD):
+    # Plot cumulative rainfall throughout the day
+    start_time = ephemeris.csd_to_unix(LSD)
+    finish_time = ephemeris.csd_to_unix(LSD + 1)
+
+    times = np.linspace(start_time, finish_time, 4096, endpoint=False)
+
+    rain = compute_cumulative_rainfall(times)
+
+    fig = plt.figure(layout="constrained", figsize=(18, 5))
+    axis = fig.subplots(1, 1)
+
+    axis.plot(
+        np.linspace(0, 360, 4096, endpoint=False),
+        rain,
+        color="tab:blue",
+        marker=".",
+        ls=":",
+        label="cumulative rainfall",
+    )
+    axis.axhline(1.0, color="tab:red", ls="-", label="flagging threshold")
+
+    axis.set_xbound(0, 360)
+
+    if np.all(rain == 0):
+        axis.set_ybound(0, 2)
+
+    # Set labels
+    axis.set_xlabel("RA [deg]", fontsize=20)
+    axis.set_ylabel("Cumulative rainfall [mm]", fontsize=20)
+
+    title = _format_title(rev, LSD)
+    axis.set_title(title, fontsize=20)
+
+    axis.legend(fancybox=True, ncol=2, shadow=True)
 
 
 # ========================================================================
@@ -1020,13 +1214,11 @@ def circle(ax, x, y, radius, **kwargs):
     -------
     circle : Artist
     """
-    from matplotlib import patches
-
     fig = ax.figure
     trans = fig.dpi_scale_trans + matplotlib.transforms.ScaledTranslation(
         x, y, ax.transData
     )
-    circle = patches.Circle((0, 0), radius, transform=trans, **kwargs)
+    circle = mpatches.Circle((0, 0), radius, transform=trans, **kwargs)
 
     # Draw circle
     return ax.add_artist(circle)
@@ -1222,9 +1414,9 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     )
 
     # Put a ring around the location of the moon if it transits on this day
-    if "lunar_transit" in ev:
-        lunar_ra = (ev["lunar_transit"] % 1) * 360.0
-        lunar_za = np.sin(np.radians(ev["lunar_dec"] - 49.0))
+    if "moon_transit" in ev:
+        lunar_ra = (ev["moon_transit"] % 1) * 360.0
+        lunar_za = np.sin(np.radians(ev["moon_dec"] - 49.0))
         circle(axes[1], lunar_ra, lunar_za, radius=0.2, facecolor="none", edgecolor="k")
 
     # Highlight the day time data
