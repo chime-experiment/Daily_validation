@@ -103,6 +103,10 @@ span.pickrev-span {
   font-size: x-large;
 }
 
+button.pickrev {
+  -webkit-appearance: none;
+}
+
 button.pickrev-good {
   background: green;
 }
@@ -117,5 +121,5 @@ button.pickrev-bad {
 }
 
 button.pickrev-selected {
-  border: 2px solid blue;
+  border-style: inset;
 }
