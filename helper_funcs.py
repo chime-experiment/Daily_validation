@@ -885,7 +885,7 @@ def plotFactMask(rev, LSD):
     patches.append(mask_patch)
 
     # Overlay the static mask
-    cmap = matplotlib.colormaps["Dark2_r"]
+    cmap = ListedColormap(["tab:cyan", "white"])
     axis.imshow(
         static_mask,
         extent=(0, 360, 400, 800),
