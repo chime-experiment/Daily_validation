@@ -592,9 +592,15 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    for fig, sim in zip(subfigs, (sensrat, sensrat_mask)):
+    # Make label patches for the masked plot
+    mask_patch = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"sensitivity mask: {100.0 * np.isnan(sensrat_mask).mean():.2f}% masked",
+    )
 
-        mask_pcnt = 100.0 * np.isnan(sim).mean()
+    patches = [None, mask_patch]
+
+    for ii, (fig, sim) in enumerate(zip(subfigs, (sensrat, sensrat_mask))):
 
         axis = fig.subplots(1, 1)
 
@@ -616,9 +622,19 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         # Highlight relevant sources
         _highlight_sources(LSD, axis, ["sun"])
 
-        title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
+        title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+
+        # If there is a patch, add a legend
+        if patches[ii] is not None:
+            axis.legend(
+                handles=[patches[ii]],
+                loc=1,
+                bbox_to_anchor=(1.0, -0.05),
+                fancybox=True,
+                shadow=True,
+            )
 
 
 def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
@@ -664,9 +680,18 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     # Make the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    for fig, sim in zip(subfigs, (vis, vis_mask)):
+    # Make label patches for the different masks
+    patch1 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"all masks: {100.0 * np.isnan(vis).mean():.2f}% masked",
+    )
+    patch2 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"full pipeline mask (all masks and chi-squared mask): {100.0 * np.isnan(vis_mask).mean():.2f}% masked",
+    )
+    patches = [patch1, patch2]
 
-        mask_pcnt = 100.0 * np.isnan(sim).mean()
+    for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
 
@@ -687,9 +712,19 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         # Highlight relevant sources
         _highlight_sources(LSD, axis)
 
-        title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
+        title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+
+        # If there is a patch, add a legend
+        if patches[ii] is not None:
+            axis.legend(
+                handles=[patches[ii]],
+                loc=1,
+                bbox_to_anchor=(1.0, -0.05),
+                fancybox=True,
+                shadow=True,
+            )
 
 
 @_fail_quietly
@@ -728,9 +763,18 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
-    for fig, sim in zip(subfigs, (vis, vis_mask)):
+    # Make label patches for the different masks
+    patch1 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"stokes I high-pass filter mask: {100.0 * np.isnan(vis).mean():.2f}% masked",
+    )
+    patch2 = mpatches.Patch(
+        color=_BAD_VALUE_COLOR,
+        label=f"stokes I high-pass filter and sumthreshold masks: {100.0 * np.isnan(vis_mask).mean():.2f}% masked",
+    )
+    patches = [patch1, patch2]
 
-        mask_pcnt = 100.0 * np.isnan(sim).mean()
+    for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
 
@@ -753,9 +797,19 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         sources = ["sun", "CAS_A", "CYG_A"]
         _highlight_sources(LSD, axis, sources)
 
-        title = _format_title(rev, LSD) + f", percent masked = {mask_pcnt:.2f}"
+        title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+
+        # If there is a patch, add a legend
+        if patches[ii] is not None:
+            axis.legend(
+                handles=[patches[ii]],
+                loc=1,
+                bbox_to_anchor=(1.0, -0.05),
+                fancybox=True,
+                shadow=True,
+            )
 
 
 @_fail_quietly
