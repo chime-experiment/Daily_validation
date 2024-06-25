@@ -27,11 +27,11 @@ usage() {
 }
 
 revdir () {
-    printf "${base}/rev_%02i" $1
+    printf "${base}/rev_${1}"
 }
 
 optdir () {
-    printf "${outputdir}/rev_%02i" $1
+    printf "${outputdir}/rev_${1}"
 }
 
 htmlfile () {
@@ -86,11 +86,11 @@ then
 fi
 
 # Resolve the latest revision if needed
-if [[ "$rev" == "latest" ]]
+if [[ "${rev}" == "latest" ]]
 then
     echo $base
     rev=$(ls $base | grep rev | sort | tail -n 1 | cut -c 5-)
-    printf "Using latest revision rev_%02i\n" $rev
+    printf "Using latest revision rev_${rev}\n"
 fi
 
 echo "Scanning ${base} for rev_${rev} days to process..."
