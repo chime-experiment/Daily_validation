@@ -1,10 +1,19 @@
-function daily_logout(how) { location.assign(script_name + '?logout=' + how + '&csd=' + csd) }
+// This is used to track asynchrous fetch requests.
+var request_id = 0;
 
-function fortnight(how) { location.assign(script_name + '?fortnight=' + how + '&csd=' + csd) }
+function daily_logout(how) { location.assign(window.location.pathname + '?logout=' + how + '&csd=' + csd) }
 
-function fortnight_logout() { location.assign(script_name + '?logout=please&fortnight=yes') }
+function fortnight(how) { location.assign(window.location.pathname + '?fortnight=' + how + '&csd=' + csd) }
 
-function show_day(show_csd) { location.assign(script_name + '?csd=' + show_csd) }
+function fortnight_logout() { location.assign(window.location.pathname + '?logout=please&fortnight=yes') }
+
+function show_day(show_csd) { location.assign(window.location.pathname + '?csd=' + show_csd) }
+
+// returns a string of the form "rev07"
+function revname(rev) {
+  srev = "0" + rev
+  return "rev" + srev.slice(-2)
+}
 
 function set_disable(id, disable) {
   elem = document.getElementById(id)
@@ -26,37 +35,96 @@ function clear_flash() {
   set_flash("empty", "")
 }
 
-function update_ui(opinion) {
-  console.log("update_ui: " + csd)
+// Receives data from a fetch or decision XHR and updates the globals
+// Then calls draw_ui to update the document
+function update_data(result) {
+  console.log("update_ui: " + JSON.stringify(result))
+
+  // Verify the request id
+  if (result.request_id != request_id) {
+    console.log("Ignoring response with invalid request ID: " + result.request_id + " != " + request_id)
+    return
+  }
+
+  // Update the opinion data
+  if ("opinions" in result) {
+    opinions = result.opinions
+  }
+
+  // Are we on a new "page"?
+  var csd_changed = ("csd" in result && result.csd != csd)
+  var rev_changed = ("rev" in result && result.rev != rev)
 
   // Update the document
-  document.title = "CHIME daily viewer - CSD " + csd
-  window.history.pushState(document.getElementById("root").innerHTML, "", script_name + "?csd=" + csd)
+  if (csd_changed) { csd = result.csd }
+  if (rev_changed) { rev = result.rev }
 
+  // Update the nav button targets
+  if ("first_csd" in result) { first_csd = result.first_csd }
+  if ("pno_csd" in result)   { pno_csd = result.pno_csd }
+  if ("prev_csd" in result)  { prev_csd = result.prev_csd }
+
+  if ("last_csd" in result) { first_csd = result.first_csd }
+  if ("nno_csd" in result)   { nno_csd = result.nno_csd }
+  if ("next_csd" in result)  { next_csd = result.next_csd }
+
+  draw_ui(csd_changed || rev_changed)
+}
+
+// Update the UI based on the contents of the globals
+function draw_ui(view_changed) {
+  console.log("draw_ui: " + view_changed)
   // Clear flash
   clear_flash()
 
-  // Load new render
-  document.getElementById("frame").src = script_name + "?fetch=rev07_" + csd
+  // Update title, and history, if necessary
+  if (view_changed) {
+    document.title = "CHIME daily viewer - CSD " + csd + " revision " + rev
+    window.history.pushState(document.getElementById("root").innerHTML, "", window.location.pathname + "?csd=" + csd + "&rev=" + rev)
+
+    // Load new render
+    document.getElementById("frame").src = window.location.pathname + "?render=" + revname(rev) + "_" + csd
+  }
+
+  // Update revision buttons
+  revisions.forEach((pickrev) => {
+    button = document.getElementById("pickrev-" + pickrev)
+    if (pickrev in opinions) {
+      decision = opinions[pickrev].decision
+      button.removeAttribute("disabled")
+    } else {
+      decision = "missing"
+      button.setAttribute("disabled", "disabled")
+    }
+    if (pickrev == rev) {
+      selected = " pickrev-selected"
+    } else {
+      selected = ""
+    }
+    button.className = "pickrev pickrev-" + decision + selected
+  });
+
+
   // Update the vote count
-  document.getElementById("opinion-count").innerHTML = opinion[3] + " existing votes"
+  var opinion = opinions[rev]
+  document.getElementById("opinion-count").innerHTML = opinion.count + " existing votes"
 
   // Enable/disable buttons
   set_disable("button_first", csd == first_csd)
   set_disable("button_pno", pno_csd == 0)
   set_disable("button_prev", prev_csd == 0)
   set_disable("button_next", next_csd == 0)
-  set_disable("button_nno", next_csd == 0)
+  set_disable("button_nno", nno_csd == 0)
   set_disable("button_last", csd == last_csd)
 
   // Set selector input
   document.getElementById("CSD").value = csd
 
   // Set opinion title
-  document.getElementById("opinion-h2").innerHTML = "Opinion for CSD #" + csd
+  document.getElementById("opinion-h2").innerHTML = "Opinion for CSD #" + csd + ", rev " + rev
 
   // Set opinion decision
-  var decision = opinion[0]
+  var decision = opinion.decision
 
   // Sanitise
   if (decision != "good" && decision != "bad" && decision != "unsure") {
@@ -69,13 +137,21 @@ function update_ui(opinion) {
     set_disable("opinion-notes", true)
   } else {
     document.getElementById("opinion-" + decision).checked = true
-    document.getElementById("opinion-notes").value = opinion[1]
+    document.getElementById("opinion-notes").value = opinion.notes
     set_disable("opinion-notes", false)
   }
 }
 
-function vet_csd() {
-  var new_csd = +(document.getElementById("CSD").value)
+// Called whenever a user clicks a revision button
+function set_rev(rev_in) {
+  rev = rev_in
+  draw_ui(true)
+}
+
+// Called whenever a new CSD is requested
+function set_csd(csd_in) {
+  // coerce to number
+  var new_csd = +csd_in
 
   // Ignore non-numbers
   if (new_csd != new_csd) {
@@ -83,102 +159,58 @@ function vet_csd() {
   }
 
   // Has anything changed?
-  if (new_csd != csd) {
-    // Check for a valid CSD
-    if (csd_list.indexOf(new_csd) === -1) {
-      // Bad input.  Try to find the right one
-      if (new_csd > last_csd) {
-        // Past end
-        new_csd = last_csd
-      } else if (new_csd < first_csd) {
-        // Before start
-        new_csd = first_csd
-      } else if (new_csd > csd) {
-        // User is going up
-        for (; new_csd <= last_csd; new_csd++) {
-          if (csd_list.indexOf(new_csd) != -1) {
-            break
-          }
-        }
-      } else {
-        // User is going down
-        for (; new_csd >= first_csd; new_csd--) {
-          if (csd_list.indexOf(new_csd) != -1) {
-            break
-          }
-        }
+  if (new_csd == csd) {
+    // If not, do nothing
+    return
+  }
+
+  // Create a request for data from the server
+
+  // Increment request_id
+  request_id = request_id + 1
+
+  // Assemble the POST data
+  var post_data = "fetch=" + new_csd + "&ssd=" + csd + "&request_id=" + request_id + "&rev=" + rev
+  console.log("data: " + post_data)
+
+  // Create the XHR
+  const xhr = new XMLHttpRequest()
+
+  xhr.addEventListener("load", (event) => {
+    if (event.target.status != 200) {
+      set_flash("warning", "Server Response " + event.target.status + ".  Check logs")
+    } else {
+      var result;
+      try {
+        result = JSON.parse(event.target.responseText)
+      } catch(error) {
+        set_flash("error", "Bad response from server! Check logs.")
+        throw(error)
       }
+
+      // Update globals and redraw UI
+      update_data(result)
     }
-  }
+  })
+  xhr.addEventListener("error", (event) => {
+    set_flash("error", "Request error! Check logs.")
+  })
 
-  // Now set
-  set_csd(new_csd)
-}
+  // POST data
+  xhr.open("POST", window.location.pathname)
+  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+  xhr.send(post_data)
 
-function set_csd(csd_in) {
-  // coerce to number
-  var new_csd = +csd_in
+  // Assume the new CSD is correct, and pre-emptively load the new render
+  document.getElementById("frame").src = window.location.pathname + "?render=" + revname(rev) + "_" + csd
 
-  // Reject unknown CSDs
-  var index = csd_list.indexOf(new_csd)
-
-  if (index === -1) {
-    index = csd_list.indexOf(csd)
-  } else {
-    csd = new_csd
-  }
-
-  // Update next and nno
-  if (index === 0) {
-    next_csd = 0
-    nno_csd = 0
-  } else {
-    next_csd = csd_list[index - 1]
-    // Search backwards through array
-    for (var nno = index - 1; nno >= 0; --nno) {
-      if (opinions[nno][0] == "none") {
-        nno_csd = csd_list[nno]
-        break
-      }
-    }
-    if (nno < 0) {
-      nno_csd = 0
-    }
-  }
-
-  // Update prev and pno
-  if (index == csd_list.length - 1) {
-    prev_csd = 0
-    pno_csd = 0
-  } else {
-    prev_csd = csd_list[index + 1]
-    // Search forwards through array
-    for (var pno = index + 1; pno < csd_list.length; ++pno) {
-      if (opinions[pno][0] == "none") {
-        pno_csd = csd_list[pno]
-        break
-      }
-    }
-    if (pno == csd_list.length) {
-      pno_csd = 0
-    }
-  }
-
-  return update_ui(opinions[index])
+  // Nothing else to do until the XHR returns
 }
 
 function submit_opinion() {
   // Get current opinion
-
-  var index = csd_list.indexOf(csd)
-  if (index === -1) {
-    // Do noting if we're not on a valid CSD
-    return
-  }
-
-  // The current opinion
-  var decision = opinions[index][0]
-  var notes = opinions[index][1]
+  var decision = opinions[rev].decision
+  var notes = opinions[rev].notes
 
   var new_decision = decision
   if (document.getElementById("opinion-none").checked) {
@@ -199,8 +231,12 @@ function submit_opinion() {
     return
   }
 
+  // Increment request_id
+  request_id = request_id + 1
+
   // Assemble the POST data
-  var post_data = "csd=" + csd + "&decision=" + new_decision + "&notes=" + encodeURIComponent(new_notes).replace(/%20/g, "+")
+  var post_data = "csd=" + csd + "&rev=" + rev + "&decision=" + new_decision + "&request_id=" + request_id
+    + "&notes=" + encodeURIComponent(new_notes).replace(/%20/g, "+")
   console.log("data: " + post_data)
 
   // Create the XHR
@@ -216,20 +252,11 @@ function submit_opinion() {
 
       // Update opinion
       if (result.result != "error") {
-        var index = csd_list.indexOf(result.csd)
-        console.log("index: " + index)
-        if (index != -1) {
-          opinions[index][0] = result.decision
-          opinions[index][1] = result.notes
-          opinions[index][3] = result.opinion_count
-          console.log("opinion: " + opinions[index])
-        }
+        update_data(result)
+      } else {
+        // Report error
+        set_flash(result.result, result.message)
       }
-
-      // Report result
-      set_flash(result.result, result.message)
-      // Update the total vote count
-      document.getElementById("opinion-count").innerHTML = result.opinion_count + " existing votes"
     }
   })
   xhr.addEventListener("error", (event) => {
@@ -237,7 +264,7 @@ function submit_opinion() {
   })
 
   // POST data
-  xhr.open("POST", script_name)
+  xhr.open("POST", window.location.pathname)
   xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
   xhr.send(post_data)
 }

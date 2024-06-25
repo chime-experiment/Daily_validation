@@ -98,3 +98,28 @@ div.csd-selector > input {
   font-size: x-large;
   padding: 0;
 }
+
+span.pickrev-span {
+  font-size: x-large;
+}
+
+button.pickrev {
+  -webkit-appearance: none;
+}
+
+button.pickrev-good {
+  background: green;
+}
+
+button.pickrev-unsure {
+  background: yellow;
+}
+
+button.pickrev-bad {
+  background: red;
+  border: none;
+}
+
+button.pickrev-selected {
+  border-style: inset;
+}

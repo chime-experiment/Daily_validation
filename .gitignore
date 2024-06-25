@@ -3,6 +3,8 @@
 
 # Misc
 *.DS_Store
+.swp
+.*.swp
 
 # General files to ignore
 **/__pycache__
