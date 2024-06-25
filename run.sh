@@ -116,7 +116,7 @@ do
     printf "[%4i of %i] processing CSD=%i \n" $i ${#days_to_process[@]} $csd
 
     printf "  Executing notebook.\n"
-    papermill ${daily_notebook} $(dnbfile $csd) -p LSD ${csd} -p rev_id 7 -k python3 \
+    papermill ${daily_notebook} $(dnbfile $csd) -p LSD ${csd} -p rev_id ${rev} -k python3 \
         --report-mode --no-log-output --no-progress-bar
     printf "  Converting notebook to html.\n"
     jupyter nbconvert --to html --no-input --output-dir=$(optdir $rev) $(dnbfile $csd)
