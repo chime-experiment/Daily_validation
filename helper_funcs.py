@@ -432,6 +432,7 @@ def events(observer, lsd):
     et = observer.lsd_to_unix(lsd + 1)
 
     e = {}
+    return_sources = []
 
     u2l = observer.unix_to_lsd
 
@@ -487,8 +488,10 @@ def events(observer, lsd):
             e[f"{name}_transit"] = u2l(tt)
             e[f"{name}_transit_start"] = u2l(tt - window_sec)
             e[f"{name}_transit_end"] = u2l(tt + window_sec)
+            # Record that there is transit information for this body
+            return_sources.append(name)
 
-    return e
+    return e, ["sun"] + return_sources
 
 
 def flag_time_spans(LSD):
@@ -537,12 +540,15 @@ def _mask_flags(times, LSD):
 
 def _highlight_sources(LSD, axobj, sources=_SOURCES, obs=chime_obs):
     """Add shaded regions over source objects."""
-    ev = events(obs, LSD)
+    ev, srcs = events(obs, LSD)
 
     for src in sources:
+        if src not in srcs:
+            # No data was available for this source
+            continue
         if src == "sun":
-            start = (ev[f"{src}_rise"] % 1) * 360.0
-            finish = (ev[f"{src}_set"] % 1) * 360.0
+            start = (ev[f"sun_rise"] % 1) * 360.0 if "sun_rise" in ev else 0
+            finish = (ev[f"sun_set"] % 1) * 360.0 if "sun_set" in ev else 360
         else:
             start = (ev[f"{src}_transit_start"] % 1) * 360.0
             finish = (ev[f"{src}_transit_end"] % 1) * 360.0
@@ -1049,7 +1055,7 @@ def plot_stability(
 
     # Calculate sunrise and sunset to indicate daytime data
     if flag_daytime:
-        ev = events(chime_obs, lsd)
+        ev, _ = events(chime_obs, lsd)
         sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
         ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
 
@@ -1363,7 +1369,7 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     md -= np.nanmedian(md, axis=0)
 
     # Calculate events like solar transit, rise ...
-    ev = events(chime_obs, LSD)
+    ev, _ = events(chime_obs, LSD)
 
     fig, axes = plt.subplots(
         2,
