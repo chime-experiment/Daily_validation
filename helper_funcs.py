@@ -400,6 +400,9 @@ def plotRingmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
     cmap = copy.copy(matplotlib.cm.inferno)
     cmap.set_bad("grey")
 
+    extent_ts = ephemeris.csd_to_unix(LSD + ringmap.ra[:] / 360.0)
+    extent = (*_get_extent(extent_ts, LSD), -1, 1)
+
     if flag_mask:
         im = ax.imshow(
             m * nanmask,
@@ -407,13 +410,11 @@ def plotRingmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
             vmax=vmax,
             aspect="auto",
             interpolation="nearest",
-            extent=(0, 360, -1, 1),
+            extent=extent,
             cmap=cmap,
         )
     else:
-        im = ax.imshow(
-            m, vmin=vmin, vmax=vmax, aspect="auto", extent=(0, 360, -1, 1), cmap=cmap
-        )
+        im = ax.imshow(m, vmin=vmin, vmax=vmax, aspect="auto", extent=extent, cmap=cmap)
     ax.set_xlabel("RA [degrees]")
     ax.set_ylabel("sin(ZA)")
     divider = make_axes_locatable(ax)
@@ -563,6 +564,12 @@ def _highlight_sources(LSD, axobj, sources=_SOURCES, obs=chime_obs):
         axobj.axvline(finish, color="k", ls="--", lw=1)
 
 
+def _get_extent(times, LSD):
+    # Convert the times to fractional CSD
+    ra = 360 * (ephemeris.unix_to_csd(times) - LSD)
+    return ra[0], ra[-1]
+
+
 @_fail_quietly
 def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     path = _get_rev_path("sensitivity", rev, LSD)
@@ -610,10 +617,10 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     for ii, (fig, sim) in enumerate(zip(subfigs, (sensrat, sensrat_mask))):
 
         axis = fig.subplots(1, 1)
-
+        extent = (*_get_extent(sens.time[sel], LSD), 400, 800)
         im = axis.imshow(
             sim,
-            extent=(0, 360, 400, 800),
+            extent=extent,
             cmap=cmap,
             aspect="auto",
             interpolation="nearest",
@@ -632,6 +639,8 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
         title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+        # Show the entire day even if there isn't data
+        axis.set_xbound(0, 360)
 
         # If there is a patch, add a legend
         if patches[ii] is not None:
@@ -701,15 +710,16 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
-
+        extent = (*_get_extent(chisq.time[sel], LSD), 400, 800)
         im = axis.imshow(
             sim,
-            extent=(0, 360, 400, 800),
+            extent=extent,
             cmap=cmap,
             aspect="auto",
             interpolation="nearest",
             norm=LogNorm(vmin=vmin, vmax=vmax),
         )
+
         divider = make_axes_locatable(axis)
         cax = divider.append_axes("right", size="1.5%", pad=0.25)
         fig.colorbar(im, cax=cax)
@@ -722,6 +732,8 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+        # Show the entire day even if there isn't data
+        axis.set_xbound(0, 360)
 
         # If there is a patch, add a legend
         if patches[ii] is not None:
@@ -784,16 +796,17 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
-
+        extent = (*_get_extent(power.time[sel], LSD), 400, 800)
         im = axis.imshow(
             sim,
-            extent=(0, 360, 400, 800),
+            extent=extent,
             cmap=cmap,
             aspect="auto",
             interpolation="nearest",
             vmin=vmin,
             vmax=vmax,
         )
+
         divider = make_axes_locatable(axis)
         cax = divider.append_axes("right", size="1.5%", pad=0.25)
         fig.colorbar(im, cax=cax)
@@ -807,6 +820,8 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
         title = _format_title(rev, LSD)
         axis.set_title(title, fontsize=50)
         _ = axis.set_xticks(np.arange(0, 361, 45))
+        # Show the entire day even if there isn't data
+        axis.set_xbound(0, 360)
 
         # If there is a patch, add a legend
         if patches[ii] is not None:
@@ -860,26 +875,31 @@ def plotFactMask(rev, LSD):
         # Trim the padded time regions
         sel = _select_CSD_bounds(file.time, LSD)
         rfm = rfm[:, sel]
+        extent = (*_get_extent(file.time[sel], LSD), 400, 800)
 
         cmap = ListedColormap(["white", "tab:pink"])
         axis.imshow(
             rfm,
-            extent=(0, 360, 400, 800),
+            extent=extent,
             cmap=cmap,
             aspect="auto",
             alpha=1.0,
             interpolation="nearest",
         )
+
         rfm_patch = mpatches.Patch(
             color=cmap(cmap.N), label=f"daily mask: {100.0 * rfm.mean():.2f}% masked"
         )
         patches.append(rfm_patch)
 
     # Plot the factorized mask
+    extent_ts = ephemeris.csd_to_unix(LSD + fmask.ra[:] / 360.0)
+    extent = (*_get_extent(extent_ts, LSD), 400, 800)
+
     cmap = matplotlib.colormaps["binary_r"]
     axis.imshow(
         mask,
-        extent=(0, 360, 400, 800),
+        extent=extent,
         cmap=cmap,
         aspect="auto",
         alpha=0.6,
@@ -894,7 +914,7 @@ def plotFactMask(rev, LSD):
     cmap = ListedColormap(["tab:cyan", "white"])
     axis.imshow(
         static_mask,
-        extent=(0, 360, 400, 800),
+        extent=extent,
         cmap=cmap,
         aspect="auto",
         alpha=1.0,
@@ -913,6 +933,7 @@ def plotFactMask(rev, LSD):
     title = _format_title(rev, LSD)
     axis.set_title(title, fontsize=20)
     _ = axis.set_xticks(np.arange(0, 361, 45))
+    axis.set_xbound(0, 360)
 
     # Add the legend
     axis.legend(
@@ -1391,6 +1412,10 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
     axes[0].set_yticks([])
     axes[0].set_ylim(0, ii + 1)
 
+    # Set the data extent
+    extent_ts = ephemeris.csd_to_unix(csd_arr)
+    extent = (*_get_extent(extent_ts, LSD), -1, 1)
+
     # Plot the template subtracted ringmap
     vl = 5
     cmap = copy.copy(matplotlib.cm.inferno)
@@ -1401,10 +1426,11 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
         vmax=vl,
         aspect="auto",
         interpolation="nearest",
-        extent=(0, 360, -1, 1),
+        extent=extent,
         origin="lower",
         cmap=cmap,
     )
+
     axes[1].set_yticks([-1, -0.5, 0, 0.5, 1])
     axes[1].yaxis.set_tick_params(labelsize=labelsize)
     axes[1].xaxis.set_tick_params(labelsize=labelsize)
@@ -1437,6 +1463,9 @@ def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
 
         ax.axvline(sr, color="k", ls="--", lw=1)
         ax.axvline(ss, color="k", ls="--", lw=1)
+
+    axes[0].set_xbound(0, 360)
+    axes[1].set_xbound(0, 360)
 
     # Give the overall plot a title identifying the CSD
     title = _format_title(rev, LSD) + f", {freq[0]:.2f}" + " MHz"
