@@ -16,7 +16,7 @@ workingdir=$(mktemp -d)
 
 usage() {
     echo "Usage:"
-    echo "  run.sh [-r REV] [-b BASEDIR]"
+    echo "  run.sh [-r REV] [-b BASEDIR] [-T]"
     echo
     echo "  Generate the validation plots for the given REV at BASEDIR. They will "
     echo "  be written into the current directory. Only missing or updated will "
@@ -24,6 +24,9 @@ usage() {
     echo
     echo "  BASEDIR should be the path to the revisions."
     echo "  REV can be a integer revision id, or the string latest (which is the default)."
+    echo
+    echo "  The -T flag indicates that this is a trial run. This script will identify "
+    echo "  the number of days to be processed, but will not actually generate the notebooks."
 }
 
 revdir () {
@@ -49,9 +52,10 @@ wnbfile () {
 rev="latest"
 base="/project/rpp-chime/chime/chime_processed/daily"
 outputdir="/project/rpp-chime/chime/validation"
+trial=false
 
 # Process command line options
-while getopts ":hr:b:" opt; do
+while getopts ":hr:b:T" opt; do
     case ${opt} in
         h )
             usage
@@ -62,6 +66,9 @@ while getopts ":hr:b:" opt; do
             ;;
         r )
             rev="${OPTARG}"
+            ;;
+        T )
+            trial=true
             ;;
         \? )
             echo "Invalid option -$OPTARG"
@@ -109,6 +116,11 @@ do
 done
 
 printf "Found %i days to process.\n" ${#days_to_process[@]}
+
+if [ "$trial" = true ] ; then
+    # Exit the script
+    return 2> /dev/null; exit
+fi
 
 for i in ${!days_to_process[@]}
 do
