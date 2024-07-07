@@ -59,11 +59,9 @@ function update_data(result) {
 
   // Update the nav button targets
   if ("first_csd" in result) { first_csd = result.first_csd }
-  if ("pno_csd" in result)   { pno_csd = result.pno_csd }
   if ("prev_csd" in result)  { prev_csd = result.prev_csd }
 
   if ("last_csd" in result) { first_csd = result.first_csd }
-  if ("nno_csd" in result)   { nno_csd = result.nno_csd }
   if ("next_csd" in result)  { next_csd = result.next_csd }
 
   draw_ui(csd_changed || rev_changed)
@@ -109,10 +107,10 @@ function draw_ui(view_changed) {
 
   // Enable/disable buttons
   set_disable("button_first", csd == first_csd)
-  set_disable("button_pno", pno_csd == 0)
+  set_disable("button_pno", csd == first_csd)
   set_disable("button_prev", prev_csd == 0)
   set_disable("button_next", next_csd == 0)
-  set_disable("button_nno", nno_csd == 0)
+  set_disable("button_nno", csd == last_csd)
   set_disable("button_last", csd == last_csd)
 
   // Set selector input
@@ -148,18 +146,26 @@ function set_rev(rev_in) {
 
 // Called whenever a new CSD is requested
 function set_csd(csd_in) {
-  // coerce to number
-  var new_csd = +csd_in
+  var new_csd = csd_in;
+  var render_early = 1;
 
-  // Ignore non-numbers
-  if (new_csd != new_csd) {
-    new_csd = csd
-  }
+  // Handle special cases
+  if (csd_in == "pno" || csd_in == "nno") {
+    render_early = 0;
+  } else {
+    // coerce to number
+    new_csd = +csd_in
 
-  // Has anything changed?
-  if (new_csd == csd) {
-    // If not, do nothing
-    return
+    // Ignore non-numbers
+    if (new_csd != new_csd) {
+      new_csd = csd
+    }
+
+    // Has anything changed?
+    if (new_csd == csd) {
+      // If not, do nothing
+      return
+    }
   }
 
   // Create a request for data from the server
@@ -199,8 +205,10 @@ function set_csd(csd_in) {
   xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
   xhr.send(post_data)
 
-  // Assume the new CSD is correct, and pre-emptively load the new render
-  document.getElementById("frame").src = window.location.pathname + "?render=" + revname(rev) + "_" + csd
+  if (render_early) {
+    // Assume the new CSD is correct, and pre-emptively load the new render
+    document.getElementById("frame").src = window.location.pathname + "?render=" + revname(rev) + "_" + csd
+  }
 
   // Nothing else to do until the XHR returns
 }
