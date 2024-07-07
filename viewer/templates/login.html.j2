@@ -1,7 +1,7 @@
 {% extends "base.html.j2" %}
 {% block title %}Login required{% endblock %}
 {% block ui %}<H2>Please Log In</H2>
-<form method="POST" action="{{ script_name }}"><input type="hidden" name="csd" value="{{ csd }}">
+<form method="POST" action="{{ script_name }}"><input type="hidden" name="csd" value="{{ csd | d(0) }}"><input type="hidden" name="rev" value="{{ rev | d(0) }}">
 {% if fortnight | d(false) %}
 <input type="hidden" name="fortnight" value="true">
 {% endif %}

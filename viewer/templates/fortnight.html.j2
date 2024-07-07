@@ -1,9 +1,13 @@
 {% extends "base.html.j2" %}
 {% block title %}2-week view{% endblock %}
+{% block headmatter %}<script type="text/javascript">
+var rev = {{ rev | d(0) }};
+var csd = {{ csd | d(0) }};
+</script>{% endblock %}
 {% block ui %}
 <div class="logout">
-<button onclick="show_day('{{ csd }}')">daily view</button>
-<button onclick="fortnight_logout()">Logout</button>
+<button onclick="show_day()">daily view</button>
+<button onclick="daily_logout('yes')">Logout</button>
 </div>
 {% endblock %}
 {% block iframesrc %}view?render=14dayview{% endblock %}

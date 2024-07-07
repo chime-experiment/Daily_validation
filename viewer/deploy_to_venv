@@ -16,7 +16,7 @@
 # see the ./test_server script, instead.
 
 # Things to deploy.  Directories are deployed recursively
-DEPLOY_LIST="daily_viewer.py fetch_from_cedar.sh templates web"
+DEPLOY_LIST="daily_viewer.py templates web"
 
 function check_venv () {
   if [[ "x${VIRTUAL_ENV}" = "x" ]]; then
