@@ -1,13 +1,11 @@
 // This is used to track asynchrous fetch requests.
 var request_id = 0;
 
-function daily_logout(how) { location.assign(window.location.pathname + '?logout=' + how + '&csd=' + csd) }
+function daily_logout(how) { location.assign(window.location.pathname + '?logout=' + how + '&csd=' + csd + '&rev=' + rev) }
 
-function fortnight(how) { location.assign(window.location.pathname + '?fortnight=' + how + '&csd=' + csd) }
+function fortnight(how) { location.assign(window.location.pathname + '?fortnight=' + how + '&csd=' + csd + '&rev=' + rev) }
 
-function fortnight_logout() { location.assign(window.location.pathname + '?logout=please&fortnight=yes') }
-
-function show_day(show_csd) { location.assign(window.location.pathname + '?csd=' + show_csd) }
+function show_day() { location.assign(window.location.pathname + '?csd=' + csd + '&rev=' + rev) }
 
 // returns a string of the form "rev07"
 function revname(rev) {

@@ -867,7 +867,11 @@ def get_response(environ):
         # Render the 2-week view
         return render_template(
             "fortnight",
-            data={"csd": query.get("csd", 0), "ui_class": "ui_2week"},
+            data={
+                "csd": query.get("csd", 0),
+                "rev": query.get("rev", 0),
+                "ui_class": "ui_2week",
+            },
             headers=headers,
         )
     if "render" in query:
