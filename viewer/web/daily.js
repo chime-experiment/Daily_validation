@@ -141,6 +141,7 @@ function draw_ui(view_changed) {
 // Called whenever a user clicks a revision button
 function set_rev(rev_in) {
   rev = rev_in
+  prefrev = rev_in
   draw_ui(true)
 }
 
@@ -173,9 +174,8 @@ function set_csd(csd_in) {
   // Increment request_id
   request_id = request_id + 1
 
-  // Assemble the POST data
-  var post_data = "fetch=" + new_csd + "&ssd=" + csd + "&request_id=" + request_id + "&rev=" + rev
-  console.log("data: " + post_data)
+  // Assemble the POST data.   We always use the "preferred revision" here
+  var post_data = "fetch=" + new_csd + "&ssd=" + csd + "&request_id=" + request_id + "&rev=" + prefrev
 
   // Create the XHR
   const xhr = new XMLHttpRequest()
@@ -207,7 +207,7 @@ function set_csd(csd_in) {
 
   if (render_early) {
     // Assume the new CSD is correct, and pre-emptively load the new render
-    document.getElementById("frame").src = window.location.pathname + "?render=" + revname(rev) + "_" + csd
+    document.getElementById("frame").src = window.location.pathname + "?render=" + revname(prefrev) + "_" + csd
   }
 
   // Nothing else to do until the XHR returns
@@ -243,7 +243,6 @@ function submit_opinion() {
   // Assemble the POST data
   var post_data = "csd=" + csd + "&rev=" + rev + "&decision=" + new_decision + "&request_id=" + request_id
     + "&notes=" + encodeURIComponent(new_notes).replace(/%20/g, "+")
-  console.log("data: " + post_data)
 
   // Create the XHR
   const xhr = new XMLHttpRequest()
@@ -253,8 +252,6 @@ function submit_opinion() {
       set_flash("warning", "Server Response " + event.target.status + ".  Check logs")
     } else {
       var result = JSON.parse(event.target.responseText)
-
-      console.log("result: " + result)
 
       // Update opinion
       if (result.result != "error") {
