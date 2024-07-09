@@ -5,6 +5,7 @@ import glob
 import json
 import time
 import base64
+import bisect
 import jinja2
 import random
 import hashlib
@@ -308,21 +309,21 @@ def get_query(environ):
     return True, query
 
 
-def get_csds_for_rev(revision):
-    """Get a list of available CSDs for the specified pipeline revision.
-    The returned list is sorted descending."""
+def get_csds_for_allrevs():
+    """Return a list of available CSDs for any known pipeline revision."""
 
     # Get a list of available renders
-    csds = list()
-    for path in glob.iglob(f"rev{revision:02d}_????.html", root_dir=render_dir):
+    csds = dict()
+    for path in glob.iglob("rev??_????.html", root_dir=render_dir):
         try:
             id_ = int(path[-9:-5])
-            csds.append(id_)
+            csds[id_] = 1
         except ValueError:
             # Ignore non-numeric values
             pass
 
-    return sorted(csds, reverse=True)
+    # Return a storted list of CSDs
+    return sorted(csds.keys())
 
 
 def get_revs_for_csd(csd):
@@ -407,6 +408,67 @@ def get_opinions_for_csd(csd, revs, user):
     return opinions
 
 
+def no_opinion_target(source, rev, user, csdlist, previous):
+    """Loop over the list of CSDs and find the "next" CSD with no
+    opinion.
+
+    Parameters
+    ----------
+    source: integer
+        The CSD where we start looking
+    rev: integer
+        The revision to use
+    user: MediaWikiUser
+        The user's record
+    csdlist: list
+        The list of available CSDs, smallest first
+    previous: boolean
+        If True, search towards CSD 0
+
+    Returns
+    -------
+    target: integer
+        the chosen CSD.  If no opinionless CSDs were found, this
+        is just the appropriate limit value of `csdlist`
+    """
+
+    # Bisect csdlist to find the starting location
+    # Then calculate CSD search subset and limit
+    if previous:
+        index = bisect.bisect_left(csdlist, source)
+        search_csds = list(reversed(csdlist[:index]))
+        limit = csdlist[0]
+    else:
+        index = bisect.bisect_right(csdlist, source)
+        search_csds = csdlist[index:]
+        limit = csdlist[-1]
+
+    # Short-circuit for empty search range
+    if not search_csds:
+        return limit
+
+    datarev = DataRevision.get(name=f"rev_{rev:02}")
+
+    # Subset of search_csds with opinions from this user (and this revision)
+    opinedcsds = {
+        opinion.lsd
+        for opinion in DataFlagOpinion.select(DataFlagOpinion.lsd).where(
+            DataFlagOpinion.revision == datarev,
+            DataFlagOpinion.type == OPINION_TYPE,
+            DataFlagOpinion.user == user,
+            DataFlagOpinion.lsd << search_csds,
+        )
+    }
+
+    # Now search for a non-opined CSD
+    for csd in search_csds:
+        if csd not in opinedcsds:
+            return csd
+
+    # Return the limit if no un-opined CSD found
+    return limit
+
+
 def csd_data(target, source, rev, user):
     """Fetch data for the "current" CSD.
 
@@ -418,13 +480,14 @@ def csd_data(target, source, rev, user):
 
     Parameters
     ----------
-    target : int
-      The requested CSD, if any, or 0 if None was requested.
+    target : int or str
+      The requested CSD, if any, or 0 if none was requested.  May also be the special
+      values "nno" or "pno" for the next/previous csd with no opinion.
     source : int
       The "source" CSD: the CSD where the user was, when requesting a new CSD
       or 0, if no source information is available.
     rev : int
-      Integer pipeline revision, or 0 to use the default
+      Integer pipeline revision.
     user : MediaWikiUser
       The user's record.
 
@@ -433,81 +496,71 @@ def csd_data(target, source, rev, user):
     data : dict
         A dictionary of data relating to the chosen CSD.
     """
+    print(f"csd_data({target}, {source}, {rev}, user)")
 
-    # Set default revision, if necessary
-    if rev == 0:
-        rev = REVISIONS[0]
+    # Santitise source
+    try:
+        source = int(source)
+    except ValueError:
+        source = 0
 
-    # Days available to the viewer.  Sorted in descending order
-    csdlist = get_csds_for_rev(rev)
+    # Sorted list of days available to the viewer.
+    csdlist = get_csds_for_allrevs()
 
-    if len(csdlist) == 0:
-        # If there are _no_ days in the chosen revision, fall back
-        # to the default revision
-        rev = REVISIONS[0]
-        csdlist = get_csds_for_rev(rev)
+    # Santiy check.
+    if not csdlist:
+        raise RuntimeError(f"No CSDs found in {render_dir}!")
 
-        # Santiy check.  The default revision _must_ have data in it.
-        if len(csdlist) == 0:
-            raise RuntimeError(f"No CSDs found for default revision ({rev})!")
+    # This is the dict we will return.
+    selections = {"first_csd": csdlist[0], "last_csd": csdlist[-1]}
 
-    datarev = DataRevision.get(name=f"rev_{rev:02}")
-
-    # Subset of csdlist with opinions from this user (and this revision)
-    opinedcsds = {
-        opinion.lsd
-        for opinion in DataFlagOpinion.select(DataFlagOpinion.lsd).where(
-            DataFlagOpinion.revision == datarev,
-            DataFlagOpinion.type == OPINION_TYPE,
-            DataFlagOpinion.user == user,
-            DataFlagOpinion.lsd << csdlist,
-        )
-    }
-
-    # This is the dict we will return.  It probably shouldn't be
-    # called "selections" anymore.
-    selections = {"rev": rev, "first_csd": csdlist[-1], "last_csd": csdlist[0]}
-
-    # If there is no CSD provided, then find the newest CSD with no opinion.
-    # If that fails, select the newest CSD
-    if target == 0:
-        for target in csdlist:
-            if target not in opinedcsds:
-                break
+    if target == "nno" or target == "pno":
+        # Set CSD for special cases.  This only works if the source is provided
+        if source:
+            target = no_opinion_target(
+                source, rev, user, csdlist, previous=(target == "pno")
+            )
         else:
-            # Just use the last csd if we couldn't find one
-            target = csdlist[0]
+            # If we don't have a starting point, then... I don't know, just go to the limit, I guess
+            target = csdlist[-1] if target == "nno" else csdlist[0]
     else:
-        # User specified a CSD
+        try:
+            target = int(target)
+        except ValueError:
+            target = 0
 
-        # Set csd to the limits, if out of bounds
-        if target > csdlist[0]:  # csdlist[0] is the largest CSD
-            target = csdlist[0]
-        elif target < csdlist[-1]:  # csdlist[-1] is the smallest CSD
+        if target == 0:
+            # No CSD provided.
+
+            # If SSD is valid, just use that
+            # otherwise, use the latest day (ignoring revision)
+            target = source if source in csdlist else csdlist[-1]
+        elif target >= csdlist[-1]:  # csdlist[-1] is the largest CSD
+            # Set csd to the limit, if out of bounds
             target = csdlist[-1]
-        else:
-            # target is in range, but if it is not available,
-            # go to the next day available
-            if target not in csdlist:
-                # Figure out direction
-                if source == 0 or target > source:
-                    # Ascending mode
-                    for i in range(len(csdlist) - 1):
-                        if (
-                            target > csdlist[i + 1]
-                        ):  # True when csdlist[i] > target > csdlist[i + 1]
-                            target = csdlist[i]
-                            break
-                else:
-                    # Descending mode
-                    for i in reversed(range(len(csdlist) - 1)):
-                        if (
-                            target < csdlist[i]
-                        ):  # True when csdlist[i] > target > csdlist[i + 1]
-                            target = csdlist[i]
-                            break
+        elif target <= csdlist[0]:  # csdlist[0] is the smallest CSD
+            # Ditto for the lower limit
+            target = csdlist[0]
+        elif target not in csdlist:
+            # target is in range, but if it is not available.
+            if source:
+                # if we know the source CSD, go to the next/previous
 
-    # Index of target
+                # Figure out direction
+                if source > target:
+                    # Find previous day.  By this point we know source > target > csdlist[0]
+                    # So, bisect_left will always return >= 0
+                    index = bisect.bisect_left(csdlist, source)
+                    target = csdlist[index]
+                else:
+                    # Find next day.  As with the other way, we know this will end up in-range
+                    index = bisect.bisect_right(csdlist, source)
+                    target = csdlist[index]
+            else:
+                # If we have no source info _and_ a bad CSD, just go to the end
+                target = csdlist[-1]
+
+    # Target is now set.  Get index of target
     index = csdlist.index(target)
 
     # Remember chosen CSD
@@ -517,43 +570,22 @@ def csd_data(target, source, rev, user):
     revs = get_revs_for_csd(target)
     selections["revs"] = revs
 
-    # Sanity check; there's probably a better way to handle this
+    # Switch revisions, if necessary
     if rev not in revs:
-        raise RuntimeError(f"render for rev {rev} CSD {target} disappeared!")
+        rev = revs[-1]
+    selections["rev"] = rev
 
-    # Determine Prev and PNO
-    if target == csdlist[-1]:
-        # At the first CSD, so both are zero
-        selections["prev_csd"] = 0
-        selections["pno_csd"] = 0
-    else:
-        selections["prev_csd"] = csdlist[index + 1]
-
-        # Find a CSD with no opinion in the trailing part of the list:
-        for pno in csdlist[index + 1 :]:
-            if pno not in opinedcsds:
-                selections["pno_csd"] = pno
-                break
-        else:
-            # None found
-            selections["pno_csd"] = 0
-
-    # Determine Next and NNO
+    # Determine prev and next
     if index == 0:
-        # At the end, so both are zero
-        selections["next_csd"] = 0
-        selections["nno_csd"] = 0
+        selections["prev_csd"] = 0
     else:
-        selections["next_csd"] = csdlist[index - 1]
+        selections["prev_csd"] = csdlist[index - 1]
 
-        # Find a CSD with no opinion in the leading part of the list:
-        for nno in csdlist[index - 1 :: -1]:
-            if nno not in opinedcsds:
-                selections["nno_csd"] = nno
-                break
-        else:
-            # None found
-            selections["nno_csd"] = 0
+    if index == len(csdlist) - 1:
+        # At the end, so zero
+        selections["next_csd"] = 0
+    else:
+        selections["next_csd"] = csdlist[index + 1]
 
     # Get the user's current opinion for the selected CSD, for all available revisions
     # The opinions include the opinion count for _all_ users.
@@ -590,6 +622,25 @@ def redirect_response(environ, headers, /, **query):
     return 302, headers
 
 
+def revision_from_query(query):
+    """Returns the revision specified in the query, or
+    a resonable default (which is the latest known
+    revision)."""
+
+    if "rev" not in query:
+        return REVISIONS[-1]
+
+    try:
+        rev = int(query["rev"])
+    except ValueError:
+        return REVISIONS[-1]
+
+    if rev not in REVISIONS:
+        return REVISIONS[-1]
+
+    return rev
+
+
 def fetch_csd(user, query, extra_data=None):
     """Return data for the fetch `query` to the client.
 
@@ -604,13 +655,13 @@ def fetch_csd(user, query, extra_data=None):
     The data is JSON serialised and returned to the client.
     """
 
-    # Tease out some data from the query
-    csd = int(query["fetch"])
-    ssd = int(query.get("ssd", 0))
-    rev = int(query.get("rev", REVISIONS[0]))
-
     # Do the actual data fetch
-    data = csd_data(csd, ssd, rev, user)
+    data = csd_data(
+        query.get("fetch", 0),
+        query.get("ssd", 0),
+        revision_from_query(query),
+        user,
+    )
 
     # Add the client's request ID, if provided
     if "request_id" in query:
@@ -732,7 +783,9 @@ def update_opinion(user, query):
 
     Returns a JSON payload with the result of the DB update."""
 
-    if "rev" not in query:
+    # Unlike with a fetch, an opinion update requires a
+    # properly set "rev" from the client
+    if "rev" not in query or query["rev"] not in REVISIONS:
         return update_error("Bad revision")
 
     rev = query["rev"]
@@ -908,7 +961,7 @@ def get_response(environ):
         csd_data(
             query.get("csd", 0),
             query.get("ssd", 0),
-            query.get("rev", 0),
+            revision_from_query(query),
             user,
         )
     )
