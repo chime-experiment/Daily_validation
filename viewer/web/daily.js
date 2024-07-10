@@ -148,7 +148,12 @@ function set_rev(rev_in) {
 // Called whenever a new CSD is requested
 function set_csd(csd_in) {
   var new_csd = csd_in;
-  var render_early = 1;
+
+  // If you set this to 1 here, then the client will attempt to render the
+  // notebook for the (csd, rev) its trying to load before hearing from the
+  // server, which might give the illusion of lower latency, in certain
+  // situations.
+  var render_early = 0;
 
   // Handle special cases
   if (csd_in == "pno" || csd_in == "nno") {
