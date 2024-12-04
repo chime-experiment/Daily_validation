@@ -1,19 +1,17 @@
 import copy
 
 import numpy as np
+from pathlib import Path
+from skyfield import almanac
+
+from datetime import datetime
+import pytz
+
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import LogNorm, ListedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from pathlib import Path
-from skyfield import almanac
-
-from datetime import datetime
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 from caput import weighted_median
 from caput.tools import invert_no_zero
@@ -25,10 +23,13 @@ from ch_util import cal_utils, ephemeris, rfi
 from chimedb import core, dataflag as df
 from ch_pipeline.analysis.flagging import compute_cumulative_rainfall
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 eph = ephemeris.skyfield_wrapper.ephemeris
 chime_obs = ephemeris.chime
 sf_obs = chime_obs.skyfield_obs()
-
 
 # ==== Plot color defaults ====
 _BAD_VALUE_COLOR = "#1a1a1a"
@@ -90,6 +91,18 @@ def get_csd(day: int | str = None, num_days: int = 0, lag: int = 0) -> int:
         return int(ephemeris.unix_to_csd(day))
 
     return int(day)
+
+
+def _csd_to_utc(csd: int | str, include_time: bool = False) -> str:
+    """Convert a CSD to a formatted UTC day."""
+    date = ephemeris.csd_to_unix(int(csd))
+
+    if include_time:
+        fmt = "%Y/%m/%d %H/%M/%S"
+    else:
+        fmt = "%Y/%m/%d"
+
+    return datetime.fromtimestamp(date, tz=pytz.utc).strftime(fmt)
 
 
 def _format_title(rev, LSD):
@@ -328,8 +341,7 @@ def plotMultipleDS(
             extent=extent,
             **imshow_params,
         )
-        date = ephemeris.csd_to_unix(int(csd))
-        date = datetime.utcfromtimestamp(date).strftime("%Y-%m-%d")
+        date = _csd_to_utc(csd, include_time=True)
         ax[ax_row, ax_col].set_title(f"{csd} ({date})")
 
     if im is None:
@@ -548,8 +560,8 @@ def _highlight_sources(LSD, axobj, sources=_SOURCES, obs=chime_obs):
             # No data was available for this source
             continue
         if src == "sun":
-            start = (ev[f"sun_rise"] % 1) * 360.0 if "sun_rise" in ev else 0
-            finish = (ev[f"sun_set"] % 1) * 360.0 if "sun_set" in ev else 360
+            start = (ev["sun_rise"] % 1) * 360.0 if "sun_rise" in ev else 0
+            finish = (ev["sun_set"] % 1) * 360.0 if "sun_set" in ev else 360
         else:
             start = (ev[f"{src}_transit_start"] % 1) * 360.0
             finish = (ev[f"{src}_transit_end"] % 1) * 360.0
@@ -590,11 +602,16 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
 
     sensrat = sens.measured[:, sp] * tools.invert_no_zero(sens.radiometer[:, sp])
     sensrat *= invert_no_zero(np.median(sensrat, axis=1))[:, np.newaxis]
-    sensrat_mask = sensrat * np.where(rfm == 0, 1, np.nan)
-    sensrat_mask *= np.where(_mask_flags(sens.time, LSD), np.nan, 1)
+    # Apply the mask and time flags
+    sensrat_mask = np.where(rfm == 0, sensrat, np.nan)
+    sensrat_mask = np.where(_mask_flags(sens.time, LSD), np.nan, sensrat_mask)
+
+    # Expand missing times
+    sensrat_mask, _, _ = infill_gaps(sensrat_mask, sens.time, sens.freq)
+    sensrat, times, _ = infill_gaps(sensrat, sens.time, sens.freq)
 
     # Select only the times that fall within the actual CSD
-    sel = _select_CSD_bounds(sens.time, LSD)
+    sel = _select_CSD_bounds(times, LSD)
     sensrat = sensrat[:, sel]
     sensrat_mask = sensrat_mask[:, sel]
 
@@ -617,7 +634,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
     for ii, (fig, sim) in enumerate(zip(subfigs, (sensrat, sensrat_mask))):
 
         axis = fig.subplots(1, 1)
-        extent = (*_get_extent(sens.time[sel], LSD), 400, 800)
+        extent = (*_get_extent(times[sel], LSD), 400, 800)
         im = axis.imshow(
             sim,
             extent=extent,
@@ -680,11 +697,15 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
         chim |= file.mask[:]
 
     vis *= np.where(rfm == 0, 1, np.nan)
-    vis_mask = vis * np.where(chim == 0, 1, np.nan)
-    vis_mask *= np.where(_mask_flags(chisq.time, LSD), np.nan, 1)
+    vis_mask = np.where(chim == 0, vis, np.nan)
+    vis_mask = np.where(_mask_flags(chisq.time, LSD), np.nan, vis_mask)
+
+    # Expand missing times
+    vis_mask, _, _ = infill_gaps(vis_mask, chisq.time, chisq.freq)
+    vis, times, _ = infill_gaps(vis, chisq.time, chisq.freq)
 
     # Select only the times that fall within the actual CSD
-    sel = _select_CSD_bounds(chisq.time, LSD)
+    sel = _select_CSD_bounds(times, LSD)
     vis = vis[:, sel]
     vis_mask = vis_mask[:, sel]
 
@@ -710,7 +731,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
     for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
-        extent = (*_get_extent(chisq.time[sel], LSD), 400, 800)
+        extent = (*_get_extent(times[sel], LSD), 400, 800)
         im = axis.imshow(
             sim,
             extent=extent,
@@ -766,11 +787,15 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     # Apply the initial weight mask
     vis *= np.where(power.weight[:, 0] == 0, 1, np.nan)
     # Apply the full mask
-    vis_mask = vis * np.where(rfm == 0, 1, np.nan)
-    vis_mask *= np.where(_mask_flags(power.time, LSD), np.nan, 1)
+    vis_mask = np.where(rfm == 0, vis, np.nan)
+    vis_mask = np.where(_mask_flags(power.time, LSD), np.nan, vis_mask)
+
+    # Expand missing times
+    vis_mask, _, _ = infill_gaps(vis_mask, power.time, power.freq)
+    vis, times, _ = infill_gaps(vis, power.time, power.freq)
 
     # Select only the times that fall within the actual CSD
-    sel = _select_CSD_bounds(power.time, LSD)
+    sel = _select_CSD_bounds(times, LSD)
     vis = vis[:, sel]
     vis_mask = vis_mask[:, sel]
 
@@ -796,7 +821,7 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
     for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
 
         axis = fig.subplots(1, 1)
-        extent = (*_get_extent(power.time[sel], LSD), 400, 800)
+        extent = (*_get_extent(times[sel], LSD), 400, 800)
         im = axis.imshow(
             sim,
             extent=extent,
@@ -1254,55 +1279,36 @@ def circle(ax, x, y, radius, **kwargs):
 # ========================================================================
 
 
-def imshow_sections(axis, x, y, c, gap_scale=0.1, *args, **kwargs):
-    """Plot an array with the pixels at given locations accounting for gaps.
+def infill_gaps(data, x, y, xspan=None, yspan=None):
+    """Infill a dataset with missing samples with NaNs."""
 
-    Parameters
-    ----------
-    axis : matplotlib.Axis
-        Axis to show image in.
-    x, y : np.ndarray[:]
-        Location of pixel centres in each direction
-    c : np.ndarray[:, :]
-        Pixel values
-    gap_scale : float, optional
-        If there is an extra gap between pixels of this amount times the nominal
-        separation, consider this a gap in the data.
+    def _interp(xi, span):
+        if span is None:
+            span = (xi[0], xi[-1])
 
-    Returns
-    -------
-    artists : list
-        List of the artists for each image section.
-    """
+        dx = np.gradient(xi, axis=-1)
+        dxm = np.median(dx)
 
-    def _find_splits(ax):
-        d = np.diff(ax)
-        md = np.median(d)
+        # Make a constant grid
+        xp = np.arange(span[0], span[1] + dxm, dxm)
+        # Map the existing data values to their indices
+        # in the new grid
+        map_ = abs(xp[:, np.newaxis] - xi[np.newaxis]).argmin(axis=0)
+        # Replace with the actual values
+        xp[map_] = xi
 
-        ranges = []
+        return xp, map_
 
-        last_cut = 0
-        for ii, di in enumerate(d):
-            if np.abs(di - md) > np.abs(gap_scale * md):
-                ranges.append((last_cut, ii + 1))
-                last_cut = ii + 1
+    xp, xmap = _interp(x, xspan)
+    yp, ymap = _interp(y, yspan)
 
-        ranges.append((last_cut, len(ax)))
+    sel_ = len(yp) * xmap[np.newaxis] + ymap[:, np.newaxis]
+    sel_ = sel_.ravel(order="C")
 
-        return ranges
+    newdata = np.full((len(xp), len(yp)), np.nan, data.dtype)
+    newdata.ravel(order="C")[sel_] = data.ravel(order="C")
 
-    artists = []
-    for xs, xe in _find_splits(x):
-        for ys, ye in _find_splits(y):
-            xa = x[xs:xe]
-            ya = y[ys:ye]
-            ca = c[ys:ye, xs:xe]
-
-            artists.append(
-                axis.imshow(ca, extent=(xa[0], xa[-1], ya[-1], ya[0]), *args, **kwargs)
-            )
-
-    return artists
+    return newdata.T, xp, yp
 
 
 # ========================================================================
