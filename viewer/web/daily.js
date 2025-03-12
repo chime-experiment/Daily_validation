@@ -13,6 +13,26 @@ function revname(rev) {
   return "rev" + srev.slice(-2)
 }
 
+function toggle_ui(show) {
+  // toggle visibility of the UI
+  ui = document.getElementById("ui")
+  noui = document.getElementById("hiddenui")
+  frame = document.getElementById("frame")
+  if (show) {
+    noui.style.display="none";
+    ui.style.display="block";
+    if (frame.classList.contains("ui_2week")) {
+      frame.style["margin-top"]="100px";
+    } else {
+      frame.style["margin-top"]="300px";
+    }
+  } else {
+    ui.style.display="none";
+    noui.style.display="block";
+    frame.style["margin-top"]="0px";
+  }
+}
+
 function set_disable(id, disable) {
   elem = document.getElementById(id)
   if (disable) {
