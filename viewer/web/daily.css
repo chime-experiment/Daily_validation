@@ -4,6 +4,16 @@ body {
   margin: 0;
 }
 
+div.hiddenui {
+  position: fixed;
+  margin: 0;
+  padding: 0;
+  top: 0;
+  left: 0;
+  display: none;
+  background: rgba(0,0,0,0);
+}
+
 div.ui {
   height: 300px;
   margin: 0;
