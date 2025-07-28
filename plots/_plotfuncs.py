@@ -32,6 +32,22 @@ eph = ephemeris.skyfield_wrapper.ephemeris
 chime_obs = ephemeris.chime
 sf_obs = chime_obs.skyfield_obs()
 
+
+__all__ = [
+    "csd_to_utc",
+    "plot_delay_power_spectrum",
+    "plot_multiple_delay_power_spectra",
+    "plot_ringmap",
+    "plot_template_subtracted_ringmap",
+    "plot_sensitivity_metric",
+    "plot_chisq_metric",
+    "plot_vis_power_metric",
+    "plot_factorized_mask",
+    "plot_rainfall",
+    "plot_point_source_stability",
+]
+
+
 # ==== Plot color defaults ====
 _BAD_VALUE_COLOR = "#1a1a1a"
 _SOURCES = ["sun", "moon", "CAS_A", "CYG_A", "TAU_A", "VIR_A", "B0329+54"]
@@ -94,7 +110,7 @@ def get_csd(day: int | str = None, num_days: int = 0, lag: int = 0) -> int:
     return int(day)
 
 
-def _csd_to_utc(csd: int | str, include_time: bool = False) -> str:
+def csd_to_utc(csd: int | str, include_time: bool = False) -> str:
     """Convert a CSD to a formatted UTC day."""
     date = ephemeris.csd_to_unix(int(csd))
 
@@ -342,7 +358,7 @@ def plot_multiple_delay_power_spectra(
             extent=extent,
             **imshow_params,
         )
-        date = _csd_to_utc(csd, include_time=True)
+        date = csd_to_utc(csd, include_time=True)
         ax[ax_row, ax_col].set_title(f"{csd} ({date})")
 
     if im is None:
