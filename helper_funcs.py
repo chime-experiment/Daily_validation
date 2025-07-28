@@ -16,9 +16,10 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from caput import weighted_median
 from caput.tools import invert_no_zero
 from caput import time as ctime
+
 from draco.core import containers
-from draco.util import tools
 from draco.analysis.sidereal import _search_nearest
+
 from ch_util import cal_utils, ephemeris, rfi
 from chimedb import core, dataflag as df
 from ch_pipeline.analysis.flagging import compute_cumulative_rainfall
@@ -146,7 +147,7 @@ def _hide_axis(ax):
 
 
 @_fail_quietly
-def plotDS(
+def plot_delay_power_spectrum(
     rev,
     LSD,
     hpf=False,
@@ -240,7 +241,7 @@ def plotDS(
 
 
 @_fail_quietly
-def plotMultipleDS(
+def plot_multiple_delay_power_spectra(
     rev,
     csd_start,
     num_days,
@@ -373,7 +374,7 @@ def plotMultipleDS(
 
 
 @_fail_quietly
-def plotRingmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
+def plot_ringmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
     """
     Plots the delay spectrum for a given LSD.
 
@@ -434,6 +435,178 @@ def plotRingmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
     fig.colorbar(im, cax=cax)
     title = _format_title(rev, LSD) + f", {freq[0]:.2f}" + " MHz"
     ax.set_title(title, fontsize=20)
+
+
+@_fail_quietly
+def plot_template_subtracted_ringmap(
+    rev, LSD, fi=400, pi=3, daytime=False, template_rev=3
+):
+    """
+    Plots the template subtracted ringmap for a given LSD with additional
+    details a) flagged out time ranges at the top, b) Sensitivity plot at
+    the bottom
+
+    Parameters
+    ----------
+    rev : int
+          Revision number
+    LSD : int
+          Day number
+    fi  : freq index
+    pi  : pol index
+    daytime : bool
+        Highlight the day time period or not.
+    template_rev: int
+        The revision to use for the background template.
+
+    Returns
+    -------
+    template subtracted ringmap
+    """
+
+    # load ringmap
+    path = _get_rev_path("ringmap", rev, LSD)
+    ringmap = containers.RingMap.from_file(
+        path, freq_sel=slice(fi, fi + 1), pol_sel=slice(pi, pi + 1)
+    )
+    csd_arr = LSD + ringmap.index_map["ra"][:] / 360.0
+
+    rm = ringmap.map[0, 0, 0]
+    rm_weight_agg = ringmap.weight[0, 0].mean(axis=-1)
+    freq = ringmap.freq
+    weight_mask = rm_weight_agg == 0.0
+
+    # calculate a mask for the ringmap
+    topos = sf_obs.vector_functions[-1]
+    sf_times = ctime.unix_to_skyfield_time(chime_obs.lsd_to_unix(csd_arr.ravel()))
+    daytime_mask = almanac.sunrise_sunset(eph, topos)(sf_times).reshape(csd_arr.shape)
+    flag_mask = np.zeros_like(csd_arr, dtype=bool)
+
+    # Calculate the set of flags for this day
+    flags_by_type = {
+        "Weights": weight_mask,
+    }
+
+    if daytime:
+        flags_by_type["Daytime"] = daytime_mask
+
+    u2l = chime_obs.unix_to_lsd
+
+    for type_, ua, ub in flag_time_spans(LSD):
+        ca = u2l(ua)
+        cb = u2l(ub)
+
+        flag_mask[(csd_arr > ca) & (csd_arr < cb)] = True
+
+        if (ca > LSD + 1) or cb < LSD:
+            continue
+
+        if type_ not in flags_by_type:
+            flags_by_type[type_] = np.zeros_like(csd_arr, dtype=bool)
+
+        flags_by_type[type_][(csd_arr > ca) & (csd_arr < cb)] = True
+
+    rm_masked_all = np.where((flag_mask | weight_mask)[:, np.newaxis], np.nan, rm)
+
+    # load ringmap template
+    path_stack = template_path / f"ringmap_rev{template_rev:02d}.zarr.zip"
+    rm_stack = containers.RingMap.from_file(
+        path_stack, freq_sel=slice(fi, fi + 1), pol_sel=slice(pi, pi + 1)
+    )
+    rm_stack = rm_stack.map[0, 0, 0]
+
+    # NOTE: do a very straightforward template subtraction and destriping
+    ra = ringmap.index_map["ra"][:]
+    md = rm_masked_all - rm_stack
+    md -= np.nanmedian(md, axis=0)
+
+    # Calculate events like solar transit, rise ...
+    ev, _ = events(chime_obs, LSD)
+
+    fig, axes = plt.subplots(
+        2,
+        1,
+        sharex=True,
+        figsize=(18, 15),
+        gridspec_kw=dict(height_ratios=[1, 10], hspace=0.0),
+    )
+
+    fontsize = 20
+    labelsize = 20
+
+    # Plot the flagged out time ranges at the very top
+    for ii, (type_, series) in enumerate(flags_by_type.items()):
+        axes[0].fill_between(
+            ra, ii, ii + 1, where=series, label=type_, color=f"C{ii}", alpha=0.5
+        )
+
+    axes[0].set_yticks([])
+    axes[0].set_ylim(0, ii + 1)
+
+    # Set the data extent
+    extent_ts = ephemeris.csd_to_unix(csd_arr)
+    extent = (*_get_extent(extent_ts, LSD), -1, 1)
+
+    # Plot the template subtracted ringmap
+    vl = 5
+    cmap = copy.copy(matplotlib.cm.inferno)
+    cmap.set_bad("grey")
+    im = axes[1].imshow(
+        md.T,
+        vmin=-vl,
+        vmax=vl,
+        aspect="auto",
+        interpolation="nearest",
+        extent=extent,
+        origin="lower",
+        cmap=cmap,
+    )
+
+    axes[1].set_yticks([-1, -0.5, 0, 0.5, 1])
+    axes[1].yaxis.set_tick_params(labelsize=labelsize)
+    axes[1].xaxis.set_tick_params(labelsize=labelsize)
+    axes[1].set_ylabel("sin(ZA)", fontsize=fontsize)
+    axes[1].set_xlabel("RA [degrees]", fontsize=fontsize)
+    cb = plt.colorbar(
+        im,
+        ax=axes.ravel(),
+        aspect=50,
+        orientation="horizontal",
+        pad=0.1,
+        location="bottom",
+    )
+
+    # Put a ring around the location of the moon if it transits on this day
+    if "moon_transit" in ev:
+        lunar_ra = (ev["moon_transit"] % 1) * 360.0
+        lunar_za = np.sin(np.radians(ev["moon_dec"] - 49.0))
+        _draw_circle(
+            axes[1], lunar_ra, lunar_za, radius=0.2, facecolor="none", edgecolor="k"
+        )
+
+    # Highlight the day time data
+    sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
+    ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
+    for ax in axes[1:]:
+        if sr < ss:
+            ax.axvspan(sr, ss, color="grey", alpha=0.5)
+        else:
+            ax.axvspan(0, ss, color="grey", alpha=0.5)
+            ax.axvspan(sr, 360, color="grey", alpha=0.5)
+
+        ax.axvline(sr, color="k", ls="--", lw=1)
+        ax.axvline(ss, color="k", ls="--", lw=1)
+
+    axes[0].set_xbound(0, 360)
+    axes[1].set_xbound(0, 360)
+
+    # Give the overall plot a title identifying the CSD
+    title = _format_title(rev, LSD) + f", {freq[0]:.2f}" + " MHz"
+    axes[0].set_title(title, fontsize=fontsize)
+
+    # Add the legend
+    h1, l1 = axes[0].get_legend_handles_labels()
+    fig.legend(h1, l1, loc=1)
 
 
 # ========================================================================
@@ -583,7 +756,7 @@ def _get_extent(times, LSD):
 
 
 @_fail_quietly
-def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
+def plot_sensitivity_metric(rev, LSD, vmin=0.995, vmax=1.005):
     path = _get_rev_path("sensitivity", rev, LSD)
     sens = containers.SystemSensitivity.from_file(path)
 
@@ -600,7 +773,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
 
     sp = 0
 
-    sensrat = sens.measured[:, sp] * tools.invert_no_zero(sens.radiometer[:, sp])
+    sensrat = sens.measured[:, sp] * invert_no_zero(sens.radiometer[:, sp])
     sensrat *= invert_no_zero(np.median(sensrat, axis=1))[:, np.newaxis]
     # Apply the mask and time flags
     sensrat_mask = np.where(rfm == 0, sensrat, np.nan)
@@ -670,7 +843,7 @@ def plotSens(rev, LSD, vmin=0.995, vmax=1.005):
             )
 
 
-def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
+def plot_chisq_metric(rev, LSD, vmin=0.9, vmax=1.4):
     path = _get_rev_path("chisq", rev, LSD)
     chisq = containers.TimeStream.from_file(path)
 
@@ -768,7 +941,7 @@ def plotChisq(rev, LSD, vmin=0.9, vmax=1.4):
 
 
 @_fail_quietly
-def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
+def plot_vis_power_metric(rev, LSD, vmin=0, vmax=5e1):
     path = _get_rev_path("power", rev, LSD)
     power = containers.TimeStream.from_file(path)
 
@@ -860,7 +1033,7 @@ def plotVisPwr(rev, LSD, vmin=0, vmax=5e1):
 
 
 @_fail_quietly
-def plotFactMask(rev, LSD):
+def plot_factorized_mask(rev, LSD):
     path = _get_rev_path("fact_mask", rev, LSD)
     fmask = containers.RFIMask.from_file(path)
 
@@ -1013,7 +1186,7 @@ def plot_rainfall(rev, LSD):
 
 
 @_fail_quietly
-def plot_stability(
+def plot_point_source_stability(
     rev,
     lsd,
     pol=None,
@@ -1131,7 +1304,7 @@ def plot_stability(
         norm = np.sqrt(template.weight[:])
     else:
         lbl = r"$(S - S_{med}) \ / \ S_{med}$"
-        norm = tools.invert_no_zero(np.abs(template.beam[:]))
+        norm = invert_no_zero(np.abs(template.beam[:]))
 
     ds *= norm
 
@@ -1244,7 +1417,7 @@ def plot_stability(
 # ========================================================================
 
 
-def circle(ax, x, y, radius, **kwargs):
+def _draw_circle(ax, x, y, radius, **kwargs):
     """Create circle on figure with axes of different sizes.
 
     Plots a circle on the current axes using `plt.Circle`, taking into account
@@ -1312,171 +1485,3 @@ def infill_gaps(data, x, y, xspan=None, yspan=None):
 
 
 # ========================================================================
-
-
-@_fail_quietly
-def plotRM_tempSub(rev, LSD, fi=400, pi=3, daytime=False, template_rev=3):
-    """
-    Plots the template subtracted ringmap for a given LSD with additional
-    details a) flagged out time ranges at the top, b) Sensitivity plot at
-    the bottom
-
-    Parameters
-    ----------
-    rev : int
-          Revision number
-    LSD : int
-          Day number
-    fi  : freq index
-    pi  : pol index
-    daytime : bool
-        Highlight the day time period or not.
-    template_rev: int
-        The revision to use for the background template.
-
-    Returns
-    -------
-    template subtracted ringmap
-    """
-
-    # load ringmap
-    path = _get_rev_path("ringmap", rev, LSD)
-    ringmap = containers.RingMap.from_file(
-        path, freq_sel=slice(fi, fi + 1), pol_sel=slice(pi, pi + 1)
-    )
-    csd_arr = LSD + ringmap.index_map["ra"][:] / 360.0
-
-    rm = ringmap.map[0, 0, 0]
-    rm_weight_agg = ringmap.weight[0, 0].mean(axis=-1)
-    freq = ringmap.freq
-    weight_mask = rm_weight_agg == 0.0
-
-    # calculate a mask for the ringmap
-    topos = sf_obs.vector_functions[-1]
-    sf_times = ctime.unix_to_skyfield_time(chime_obs.lsd_to_unix(csd_arr.ravel()))
-    daytime_mask = almanac.sunrise_sunset(eph, topos)(sf_times).reshape(csd_arr.shape)
-    flag_mask = np.zeros_like(csd_arr, dtype=bool)
-
-    # Calculate the set of flags for this day
-    flags_by_type = {
-        "Weights": weight_mask,
-    }
-
-    if daytime:
-        flags_by_type["Daytime"] = daytime_mask
-
-    u2l = chime_obs.unix_to_lsd
-
-    for type_, ua, ub in flag_time_spans(LSD):
-        ca = u2l(ua)
-        cb = u2l(ub)
-
-        flag_mask[(csd_arr > ca) & (csd_arr < cb)] = True
-
-        if (ca > LSD + 1) or cb < LSD:
-            continue
-
-        if type_ not in flags_by_type:
-            flags_by_type[type_] = np.zeros_like(csd_arr, dtype=bool)
-
-        flags_by_type[type_][(csd_arr > ca) & (csd_arr < cb)] = True
-
-    rm_masked_all = np.where((flag_mask | weight_mask)[:, np.newaxis], np.nan, rm)
-
-    # load ringmap template
-    path_stack = template_path / f"ringmap_rev{template_rev:02d}.zarr.zip"
-    rm_stack = containers.RingMap.from_file(
-        path_stack, freq_sel=slice(fi, fi + 1), pol_sel=slice(pi, pi + 1)
-    )
-    rm_stack = rm_stack.map[0, 0, 0]
-
-    # NOTE: do a very straightforward template subtraction and destriping
-    ra = ringmap.index_map["ra"][:]
-    md = rm_masked_all - rm_stack
-    md -= np.nanmedian(md, axis=0)
-
-    # Calculate events like solar transit, rise ...
-    ev, _ = events(chime_obs, LSD)
-
-    fig, axes = plt.subplots(
-        2,
-        1,
-        sharex=True,
-        figsize=(18, 15),
-        gridspec_kw=dict(height_ratios=[1, 10], hspace=0.0),
-    )
-
-    fontsize = 20
-    labelsize = 20
-
-    # Plot the flagged out time ranges at the very top
-    for ii, (type_, series) in enumerate(flags_by_type.items()):
-        axes[0].fill_between(
-            ra, ii, ii + 1, where=series, label=type_, color=f"C{ii}", alpha=0.5
-        )
-
-    axes[0].set_yticks([])
-    axes[0].set_ylim(0, ii + 1)
-
-    # Set the data extent
-    extent_ts = ephemeris.csd_to_unix(csd_arr)
-    extent = (*_get_extent(extent_ts, LSD), -1, 1)
-
-    # Plot the template subtracted ringmap
-    vl = 5
-    cmap = copy.copy(matplotlib.cm.inferno)
-    cmap.set_bad("grey")
-    im = axes[1].imshow(
-        md.T,
-        vmin=-vl,
-        vmax=vl,
-        aspect="auto",
-        interpolation="nearest",
-        extent=extent,
-        origin="lower",
-        cmap=cmap,
-    )
-
-    axes[1].set_yticks([-1, -0.5, 0, 0.5, 1])
-    axes[1].yaxis.set_tick_params(labelsize=labelsize)
-    axes[1].xaxis.set_tick_params(labelsize=labelsize)
-    axes[1].set_ylabel("sin(ZA)", fontsize=fontsize)
-    axes[1].set_xlabel("RA [degrees]", fontsize=fontsize)
-    cb = plt.colorbar(
-        im,
-        ax=axes.ravel(),
-        aspect=50,
-        orientation="horizontal",
-        pad=0.1,
-        location="bottom",
-    )
-
-    # Put a ring around the location of the moon if it transits on this day
-    if "moon_transit" in ev:
-        lunar_ra = (ev["moon_transit"] % 1) * 360.0
-        lunar_za = np.sin(np.radians(ev["moon_dec"] - 49.0))
-        circle(axes[1], lunar_ra, lunar_za, radius=0.2, facecolor="none", edgecolor="k")
-
-    # Highlight the day time data
-    sr = (ev["sun_rise"] % 1) * 360 if "sun_rise" in ev else 0
-    ss = (ev["sun_set"] % 1) * 360 if "sun_set" in ev else 360
-    for ax in axes[1:]:
-        if sr < ss:
-            ax.axvspan(sr, ss, color="grey", alpha=0.5)
-        else:
-            ax.axvspan(0, ss, color="grey", alpha=0.5)
-            ax.axvspan(sr, 360, color="grey", alpha=0.5)
-
-        ax.axvline(sr, color="k", ls="--", lw=1)
-        ax.axvline(ss, color="k", ls="--", lw=1)
-
-    axes[0].set_xbound(0, 360)
-    axes[1].set_xbound(0, 360)
-
-    # Give the overall plot a title identifying the CSD
-    title = _format_title(rev, LSD) + f", {freq[0]:.2f}" + " MHz"
-    axes[0].set_title(title, fontsize=fontsize)
-
-    # Add the legend
-    h1, l1 = axes[0].get_legend_handles_labels()
-    fig.legend(h1, l1, loc=1)
