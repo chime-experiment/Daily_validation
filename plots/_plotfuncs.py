@@ -1538,3 +1538,156 @@ def infill_gaps(data, x, y, xspan=None, yspan=None):
 
 
 # ========================================================================
+
+
+def plot_delay_power_spectra_and_chisq(
+    rev,
+    csd_start,
+    num_days,
+    reverse=True,
+    hpf=False,
+    clim_ds=[1e-4, 1e0],
+    clim_chisq=[0.9, 1.4],
+    cmap="inferno",
+):
+    """Plot multiple delay spectra and corresponding chisq metric in a given range.
+
+    Parameters
+    ----------
+    rev : int
+        Revision number
+    csd_start : int
+        First csd in the range
+    num_days : int
+        Number of days to plot, starting at `csd_start`
+    reverse : bool, optional
+        If true, display days in decreasing order
+    hpf : bool, optional
+        delay spectra with/without high pass filter (True/False)
+    clim_ds : list, optional
+        min, max values in the delay spectrum colourscale
+    clim_chisq : list, optional
+        min, max values in the chisquared colourscale
+    cmap : colormap, optional (default 'inferno')
+        colourmap to use for all plots
+    """
+
+    if num_days < 1:
+        print("No days requested")
+        return
+
+    # Accumulate the number of days available
+    count = 0
+    csds = list(range(csd_start, csd_start + num_days))
+    if reverse:
+        csds = csds[::-1]
+
+    ds_type_ = "delayspectrum_hpf" if hpf else "delayspectrum"
+
+    plt_shape = (num_days, 2)
+
+    # Make the figure and axes
+    fig, ax = plt.subplots(
+        *plt_shape,
+        figsize=(int(10 * plt_shape[1]), int(10 * plt_shape[0])),
+        layout="constrained",
+    )
+    # If no data is plotted, we probably shouldn't display anything
+    im = None
+    ds_imshow_params = {
+        "origin": "lower",
+        "aspect": "auto",
+        "interpolation": "nearest",
+        "norm": LogNorm(),
+        "clim": clim_ds,
+        "cmap": cmap,
+    }
+    chisq_imshow_params = {
+        "origin": "lower",
+        "aspect": "auto",
+        "interpolation": "nearest",
+        "norm": LogNorm(),
+        "clim": clim_chisq,
+        "cmap": cmap,
+    }
+
+    for ii, csd in enumerate(csds):
+        # First load and plot the power spectrum
+        dspath = _get_rev_path(ds_type_, rev, csd)
+
+        try:
+            DS = containers.DelaySpectrum.from_file(dspath)
+        except FileNotFoundError:
+            # Hide this axis, but don't actually disable it
+            _hide_axis(ax[ii, 0])
+            # grey out this subplot
+            ax[ii, 0].set_facecolor("#686868")
+            ds_found = False
+        else:
+            ds_found = True
+
+        # Now load the chisq
+        cpath = _get_rev_path("chisq", rev, csd)
+
+        try:
+            chisq = containers.TimeStream.from_file(cpath)
+        except FileNotFoundError:
+            # Hide this axis, but don't actually disable it
+            _hide_axis(ax[ii, 1])
+            # grey out this subplot
+            ax[ii, 1].set_facecolor("#686868")
+            chisq_found = False
+        else:
+            chisq_found = True
+
+        if (not chisq_found) and (not ds_found):
+            count += 1
+            continue
+
+        # Plot the power spectrum
+        # Get the axis extent and any masking
+        tau = DS.index_map["delay"] * 1e3
+        baseline_vec = DS.index_map["baseline"]
+        bl_mask = _mask_baselines(baseline_vec, single_mask=True)
+        bl_mask = np.tile(bl_mask, (len(tau), 1))
+
+        extent = [0, baseline_vec.shape[0], tau[0], tau[-1]]
+
+        im = ax[ii, 0].imshow(
+            np.ma.masked_array(DS.spectrum[:].T.real, mask=~bl_mask.T),
+            extent=extent,
+            **ds_imshow_params,
+        )
+        date = csd_to_utc(csd, include_time=True)
+        ax[ii, 0].set_title(f"{csd} ({date})")
+
+        # Plot the chisq. Unfortunately this is just copy-pasted
+        # from the other chisq plotting code. We should really
+        # rework this whole module
+        vis = chisq.vis[:, 0].real
+
+        # Load all input masks
+        rfm = np.zeros(vis.shape, dtype=bool)
+        for name in {"stokesi_mask", "sens_mask", "freq_mask", "chisq_mask"}:
+            rfi_path = _get_rev_path(name, rev, csd)
+            try:
+                file = containers.RFIMask.from_file(rfi_path)
+            except FileNotFoundError:
+                continue
+            rfm |= file.mask[:]
+
+        # Apply the masks and crop
+        vis *= np.where(rfm == 0, 1, np.nan)
+        vis *= np.where(_mask_flags(chisq.time, csd), np.nan, 1)
+
+        # Expand missing times
+        vis, times, _ = infill_gaps(vis, chisq.time, chisq.freq)
+
+        # Select only the times that fall within the actual CSD
+        sel = _select_CSD_bounds(times, csd)
+        vis = vis[:, sel]
+
+        extent = (*_get_extent(times[sel], csd), 400, 800)
+        im = ax[ii, 1].imshow(vis, extent=extent, **chisq_imshow_params)
+
+        ...
