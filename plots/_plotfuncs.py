@@ -4,8 +4,7 @@ import numpy as np
 from pathlib import Path
 from skyfield import almanac
 
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -35,6 +34,7 @@ sf_obs = chime_obs.skyfield_obs()
 
 __all__ = [
     "csd_to_utc",
+    "query_calibrator",
     "plot_delay_power_spectrum",
     "plot_multiple_delay_power_spectra",
     "plot_ringmap",
@@ -120,7 +120,7 @@ def csd_to_utc(csd: int | str, include_time: bool = False) -> str:
     else:
         fmt = "%Y/%m/%d"
 
-    return datetime.fromtimestamp(date, tz=pytz.utc).strftime(fmt)
+    return datetime.fromtimestamp(date, tz=timezone.utc).strftime(fmt)
 
 
 def _format_title(rev, LSD):
@@ -1535,6 +1535,45 @@ def infill_gaps(data, x, y, xspan=None, yspan=None):
     newdata.ravel(order="C")[sel_] = data.ravel(order="C")
 
     return newdata.T, xp, yp
+
+
+def query_calibrator(LSD):
+    """Query the (likely) active calibrator for a CSD."""
+    import chimedb.dataset as ds
+
+    core.connect()
+
+    gain_type = ds.DatasetStateType.select().where(ds.DatasetStateType.name == "gains")
+
+    query = (
+        ds.DatasetState.select(ds.DatasetState.id)
+        .where(
+            ds.DatasetState.type == gain_type,
+            ds.DatasetState.time <= datetime.fromtimestamp(chime_obs.lsd_to_unix(LSD)),
+        )
+        .order_by(
+            ds.DatasetState.time.desc(),
+        )
+    )
+
+    # Get the closest result, which should be the applied gains for this CSD
+    if not query:
+        return "Unknown"
+
+    # Work backwards to get the most recent calibrator
+    for entry in query:
+        update_id = ds.DatasetState.from_id(entry.id).data["data"]["update_id"]
+
+        components = update_id.split("_")
+
+        # `components` should have at least length 3 if this is valid
+        if len(components) < 3:
+            continue
+
+        calibrator = components[2].upper()
+        return calibrator[:-1] + "_" + calibrator[-1]
+
+    return "Unknown"
 
 
 # ========================================================================
