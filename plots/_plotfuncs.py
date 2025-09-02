@@ -20,7 +20,7 @@ from caput import time as ctime
 from draco.core import containers
 from draco.analysis.sidereal import _search_nearest
 
-from ch_util import cal_utils, ephemeris, rfi
+from ch_util import cal_utils, ephemeris, fluxcat, rfi
 from chimedb import core, dataflag as df
 from ch_pipeline.analysis.flagging import compute_cumulative_rainfall
 
@@ -44,6 +44,7 @@ __all__ = [
     "plot_vis_power_metric",
     "plot_factorized_mask",
     "plot_rainfall",
+    "plot_point_source_spectra",
     "plot_point_source_stability",
 ]
 
@@ -1196,6 +1197,42 @@ def plot_rainfall(rev, LSD):
     axis.set_title(title, fontsize=20)
 
     axis.legend(fancybox=True, ncol=2, shadow=True)
+
+
+def plot_point_source_spectra(rev, LSD):
+    """Plot spectra of a selection of point sources."""
+    path = _get_rev_path("sourceflux", rev, LSD)
+    # Only load CAS_A, CYG_A, TAU_A, VIR_A
+    data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
+
+    scales = [(1800, 5500), (1800, 5500), (200, 2000), (0, 1000)]
+
+    # Make a figure
+    fig, ax = plt.subplots(2, 2, figsize=(50, 25))
+
+    for ii in range(4):
+        axis = ax[ii // 2, ii % 2]
+
+        spectrum = np.ma.masked_where(data.weight[ii, 0] == 0.0, data.beam[ii, 0])
+        predicted = fluxcat.FluxCatalog[data.id[ii]].predict_flux(data.freq)
+
+        axis.plot(data.freq, predicted, color="k", lw=2, ls="--", label="Predicted")
+        axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
+
+        axis.set_xlabel("Freq [MHz]", fontsize=25)
+        axis.set_ylabel("Flux Density [Jy]", fontsize=25)
+        axis.set_title(data.id[ii], fontsize=30)
+
+        axis.minorticks_on()
+        axis.grid(which="major", ls="--", alpha=0.6)
+        axis.grid(which="minor", ls=":", alpha=0.4)
+
+        axis.set_ybound(scales[ii])
+
+    title = _format_title(rev, LSD)
+    fig.suptitle(title, fontsize=40)
+
+    fig.tight_layout()
 
 
 # ========================================================================
