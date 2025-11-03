@@ -19,16 +19,21 @@ from caput import time as ctime
 from draco.core import containers
 from draco.analysis.sidereal import _search_nearest
 
-from ch_util import cal_utils, ephemeris, fluxcat, rfi
+from ch_util import cal_utils, fluxcat, rfi
+from ch_ephem.observers import chime as chime_obs
+from ch_ephem.sources import source_dictionary
 from chimedb import core, dataflag as df
 from ch_pipeline.analysis.flagging import compute_cumulative_rainfall
 
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
-eph = ephemeris.skyfield_wrapper.ephemeris
-chime_obs = ephemeris.chime
+# Suppress all-NaN slice warning, since it doesn't affect the plots
+warnings.filterwarnings("ignore", message=r"All-NaN (slice|axis) encountered")
+
+eph = ctime.skyfield_wrapper.ephemeris
 sf_obs = chime_obs.skyfield_obs()
 
 
@@ -104,18 +109,18 @@ def get_csd(day: int | str = None, num_days: int = 0, lag: int = 0) -> int:
     If None, return the current CSD.
     """
     if day is None:
-        return int(ephemeris.chime.get_current_lsd() - num_days - lag)
+        return int(chime_obs.get_current_lsd() - num_days - lag)
 
     if isinstance(day, str):
         day = datetime.strptime(day, "%Y/%m/%d").timestamp()
-        return int(ephemeris.unix_to_csd(day))
+        return int(chime_obs.unix_to_lsd(day))
 
     return int(day)
 
 
 def csd_to_utc(csd: int | str, include_time: bool = False) -> str:
     """Convert a CSD to a formatted UTC day."""
-    date = ephemeris.csd_to_unix(int(csd))
+    date = chime_obs.lsd_to_unix(int(csd))
 
     if include_time:
         fmt = "%Y/%m/%d %H/%M/%S"
@@ -422,7 +427,7 @@ def plot_ringmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
 
     nanmask = np.where(w == 0, np.nan, 1)
     nanmask *= np.where(
-        _mask_flags(ephemeris.csd_to_unix(LSD + ringmap.ra / 360.0), LSD), np.nan, 1
+        _mask_flags(chime_obs.lsd_to_unix(LSD + ringmap.ra / 360.0), LSD), np.nan, 1
     )
 
     m -= np.nanmedian(m * nanmask, axis=1)[:, np.newaxis]
@@ -432,7 +437,7 @@ def plot_ringmap(rev, LSD, vmin=-5, vmax=20, fi=400, flag_mask=True):
     cmap = copy.copy(matplotlib.cm.inferno)
     cmap.set_bad("grey")
 
-    extent_ts = ephemeris.csd_to_unix(LSD + ringmap.ra[:] / 360.0)
+    extent_ts = chime_obs.lsd_to_unix(LSD + ringmap.ra[:] / 360.0)
     extent = (*_get_extent(extent_ts, LSD), -1, 1)
 
     if flag_mask:
@@ -563,7 +568,7 @@ def plot_template_subtracted_ringmap(
     axes[0].set_ylim(0, ii + 1)
 
     # Set the data extent
-    extent_ts = ephemeris.csd_to_unix(csd_arr)
+    extent_ts = chime_obs.lsd_to_unix(csd_arr)
     extent = (*_get_extent(extent_ts, LSD), -1, 1)
 
     # Plot the template subtracted ringmap
@@ -643,7 +648,7 @@ def events(observer, lsd):
 
     sources = [src for src in _SOURCES if src not in {"sun", "moon"}]
 
-    bodies = {src: ephemeris.source_dictionary[src] for src in sources}
+    bodies = {src: source_dictionary[src] for src in sources}
     bodies["moon"] = eph["moon"]
 
     # Sun is handled differently because we care about rise/set
@@ -672,7 +677,7 @@ def events(observer, lsd):
         else:
             continue
 
-        sf_time = ephemeris.unix_to_skyfield_time(tt)
+        sf_time = ctime.unix_to_skyfield_time(tt)
         pos = observer.skyfield_obs().at(sf_time).observe(body)
 
         alt = pos.apparent().altaz()[0]
@@ -687,7 +692,7 @@ def events(observer, lsd):
             window_deg = 2.0 * cal_utils.guess_fwhm(
                 800.0, pol="X", dec=dec.radians, sigma=True
             )
-            window_sec = window_deg * 240.0 * ephemeris.SIDEREAL_S
+            window_sec = window_deg * 240.0 * ctime.SIDEREAL_S
 
             # Enter the transit timings in the output dict
             e[f"{name}_transit"] = u2l(tt)
@@ -702,8 +707,8 @@ def events(observer, lsd):
 def flag_time_spans(LSD):
     core.connect()
 
-    ut_start = ephemeris.csd_to_unix(LSD)
-    ut_end = ephemeris.csd_to_unix(LSD + 1)
+    ut_start = chime_obs.lsd_to_unix(LSD)
+    ut_end = chime_obs.lsd_to_unix(LSD + 1)
 
     bad_flags = [
         "bad_calibration_fpga_restart",
@@ -770,7 +775,7 @@ def _highlight_sources(LSD, axobj, sources=_SOURCES, obs=chime_obs):
 
 def _get_extent(times, LSD):
     # Convert the times to fractional CSD
-    ra = 360 * (ephemeris.unix_to_csd(times) - LSD)
+    ra = 360 * (chime_obs.unix_to_lsd(times) - LSD)
     return ra[0], ra[-1]
 
 
@@ -1176,7 +1181,7 @@ def plot_factorized_mask(rev, LSD):
     mask = np.ma.masked_where(mask == 0, mask)
 
     # Get the static mask that was active for this CSD
-    timestamp = ephemeris.csd_to_unix(fmask.attrs.get("csd", fmask.attrs.get("lsd")))
+    timestamp = chime_obs.lsd_to_unix(fmask.attrs.get("csd", fmask.attrs.get("lsd")))
     static_mask = np.zeros(mask.shape, mask.dtype)
     static_mask |= rfi.frequency_mask(fmask.freq, timestamp=timestamp)[:, np.newaxis]
     # Ensure that the static mask will be transparent anywhere that is not flagged
@@ -1226,7 +1231,7 @@ def plot_factorized_mask(rev, LSD):
         patches.append(rfm_patch)
 
     # Plot the factorized mask
-    extent_ts = ephemeris.csd_to_unix(LSD + fmask.ra[:] / 360.0)
+    extent_ts = chime_obs.lsd_to_unix(LSD + fmask.ra[:] / 360.0)
     extent = (*_get_extent(extent_ts, LSD), 400, 800)
 
     cmap = matplotlib.colormaps["binary_r"]
@@ -1282,8 +1287,8 @@ def plot_factorized_mask(rev, LSD):
 @_fail_quietly
 def plot_rainfall(rev, LSD):
     # Plot cumulative rainfall throughout the day
-    start_time = ephemeris.csd_to_unix(LSD)
-    finish_time = ephemeris.csd_to_unix(LSD + 1)
+    start_time = chime_obs.lsd_to_unix(LSD)
+    finish_time = chime_obs.lsd_to_unix(LSD + 1)
 
     times = np.linspace(start_time, finish_time, 4096, endpoint=False)
 
@@ -1432,8 +1437,8 @@ def plot_point_source_stability(
     dec = dec[valid]
 
     # Flag bad data
-    flag_rfi = ~rfi.frequency_mask(freq, timestamp=ephemeris.csd_to_unix(lsd))
-    flag_time = ~_mask_flags(ephemeris.csd_to_unix(lsd + ra / 360.0), lsd)
+    flag_rfi = ~rfi.frequency_mask(freq, timestamp=chime_obs.lsd_to_unix(lsd))
+    flag_time = ~_mask_flags(chime_obs.lsd_to_unix(lsd + ra / 360.0), lsd)
 
     flag = (
         (data.weight[:] > 0.0)
