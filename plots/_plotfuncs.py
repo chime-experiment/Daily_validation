@@ -66,7 +66,7 @@ base_path = Path("/project/rpp-chime/chime/chime_processed/daily")
 template_path = Path("/project/rpp-chime/chime/validation/templates")
 
 _file_spec = {
-    "ringmap": ("ringmap_", ".zarr.zip"),
+    "ringmap": ("ringmap_", (".zarr.zip", ".h5")),
     "delayspectrum": ("delayspectrum_", ".h5"),
     "delayspectrum_hpf": ("delayspectrum_hpf_", ".h5"),
     "sensitivity": ("sensitivity_", ".h5"),
@@ -100,7 +100,21 @@ def _get_rev_path(type_: str, rev: int, lsd: int) -> Path:
 
     prefix, suffix = _file_spec[type_]
 
-    return base_path / f"rev_{rev:02d}" / f"{lsd:d}" / f"{prefix}lsd_{lsd:d}{suffix}"
+    if not isinstance(suffix, list | tuple):
+        suffix = [suffix]
+
+    for sfx in suffix:
+        candidate_path = (
+            base_path / f"rev_{rev:02d}" / f"{lsd:d}" / f"{prefix}lsd_{lsd:d}{sfx}"
+        )
+
+        if candidate_path.exists():
+            return candidate_path
+
+    raise FileNotFoundError(
+        f"No file found for type {type_}, rev {rev}, lsd {lsd}, "
+        f"with candidate prefix/suffix(es) {prefix}/{suffix}."
+    )
 
 
 def get_csd(day: int | str = None, num_days: int = 0, lag: int = 0) -> int:
