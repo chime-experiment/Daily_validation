@@ -1,3 +1,3 @@
 """Plotting functions."""
 
-from ._plotfuncs import *  # noqa: F403
+from ._plots import *  # noqa: F403
