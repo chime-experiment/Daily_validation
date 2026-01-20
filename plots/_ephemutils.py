@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from ch_util import cal_utils
 from ch_ephem.observers import chime as chime_obs
 from ch_ephem.sources import source_dictionary
-from caput.astro import skyfield, time as ctime
+from caput import time as ctime
 
-eph = skyfield.skyfield_wrapper.ephemeris
+eph = ctime.skyfield_wrapper.ephemeris
 
 SOURCES = ["sun", "moon", "CAS_A", "CYG_A", "TAU_A", "VIR_A", "B0329+54"]
 
