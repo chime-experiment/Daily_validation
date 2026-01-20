@@ -48,6 +48,7 @@ __all__ = [
     "plot_factorized_mask",
     "plot_rainfall",
     "plot_point_source_spectra",
+    "plot_template_subtracted_point_source_spectra",
     "plot_point_source_stability",
 ]
 
@@ -1196,6 +1197,39 @@ def plot_point_source_spectra(rev, LSD):
         axis.grid(which="minor", ls=":", alpha=0.4)
 
         axis.set_ybound(scales[ii])
+
+    title = _plotutils.format_title(rev, LSD)
+    fig.suptitle(title, fontsize=40)
+
+    fig.tight_layout()
+
+
+@_util.fail_quietly
+def plot_template_subtracted_point_source_spectra(rev, LSD):
+    """Plot spectra of a selection of template-subtracted point sources."""
+    path = _pathutils.construct_file_path("sourceflux_template_subtract", rev, LSD)
+    # Only load four brightest sources
+    data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
+
+    # Make a figure
+    fig, ax = plt.subplots(2, 2, figsize=(50, 25))
+
+    for ii in range(4):
+        axis = ax[ii // 2, ii % 2]
+
+        spectrum = np.ma.masked_where(data.weight[ii, 0] == 0.0, data.beam[ii, 0])
+
+        axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
+
+        axis.set_xlabel("Freq [MHz]", fontsize=25)
+        axis.set_ylabel("Flux Density [Jy]", fontsize=25)
+        axis.set_title(data.id[ii], fontsize=30)
+
+        axis.minorticks_on()
+        axis.grid(which="major", ls="--", alpha=0.6)
+        axis.grid(which="minor", ls=":", alpha=0.4)
+
+        axis.set_ybound([1e0, 5e2])
 
     title = _plotutils.format_title(rev, LSD)
     fig.suptitle(title, fontsize=40)
