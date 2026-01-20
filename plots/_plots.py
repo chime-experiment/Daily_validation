@@ -42,6 +42,7 @@ __all__ = [
     "plot_ringmap",
     "plot_template_subtracted_ringmap",
     "plot_sensitivity_metric",
+    "plot_template_subtracted_ringmap_chisq",
     "plot_chisq_metric",
     "plot_multiple_chisq",
     "plot_vis_power_metric",
@@ -279,7 +280,7 @@ def plot_multiple_delay_power_spectra(
     print(f"Data products found for {num_days - count}/{num_days} days.")
 
 
-# @_util.fail_quietly
+@_util.fail_quietly
 def plot_delay_power_spectrum_bands(
     rev,
     LSD,
@@ -817,6 +818,58 @@ def plot_chisq_metric(rev, LSD, vmin=0.9, vmax=1.4):
             )
 
 
+def plot_template_subtracted_ringmap_chisq(rev, LSD):
+    """Plot templte-subtracted ringmap chisq-over-elevation."""
+    path = _pathutils.construct_file_path("ringmap_chisq", rev, LSD)
+    chisq = containers.RingMap.from_file(path)
+
+    rm = chisq.map[0, ..., 0]
+
+    # Apply the weight mask
+    rm = np.ma.masked_where(chisq.weight[..., 0] == 0, rm)
+
+    fig, ax = plt.subplots(
+        2, 2, figsize=(30, 20), sharex=True, sharey=True, layout="constrained"
+    )
+
+    cmap = copy.copy(matplotlib.cm.viridis)
+    cmap.set_bad(_plotutils.BAD_VALUE_COLOR)
+
+    extent_ts = chime_obs.lsd_to_unix(LSD + chisq.ra[:] / 360.0)
+    extent = (*_ephemutils.get_extent(extent_ts, LSD), 400, 800)
+
+    axes = ax.ravel()
+
+    for pol in range(rm.shape[0]):
+        # Try to come up with a somewhat reasonable color scale
+
+        rmp = rm[pol]
+
+        rmc = rmp.compressed()
+        vmin = np.percentile(rmc, 5).astype(float)
+        vmax = np.percentile(rmc, 95).astype(float)
+
+        im = axes[pol].imshow(
+            rm[pol],
+            extent=extent,
+            aspect="auto",
+            interpolation="nearest",
+            norm=LogNorm(vmin=vmin, vmax=vmax),
+            cmap=cmap,
+        )
+
+        if (len(axes) - pol) <= 2:
+            axes[pol].set_xlabel("RA [degrees]", fontsize=20)
+        if not (pol % 2):
+            axes[pol].set_ylabel("Freq [MHz]", fontsize=20)
+
+        axes[pol].set_title(f"{chisq.pol[pol]}", fontsize=20)
+        fig.colorbar(im, ax=axes[pol], location="right", aspect=40, pad=0.01)
+
+    title = _plotutils.format_title(rev, LSD)
+    fig.suptitle(title, fontsize=30)
+
+
 @_util.fail_quietly
 def plot_multiple_chisq(rev, csd_start, num_days, reverse=True, vmin=0.9, vmax=1.4):
     """Plot multiple chisq in a given range."""
@@ -1235,7 +1288,7 @@ def plot_template_subtracted_point_source_spectra(rev, LSD):
         axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
 
         axis.set_xlabel("Freq [MHz]", fontsize=25)
-        axis.set_ylabel("Flux Density Ratio [Jy/Jy]", fontsize=25)
+        axis.set_ylabel("Flux Density [Jy]", fontsize=25)
         axis.set_title(data.id[ii], fontsize=30)
 
         axis.minorticks_on()
