@@ -713,7 +713,7 @@ def plot_chisq_metric(rev, LSD, vmin=0.9, vmax=1.4):
 
     # Load all input masks
     rfm = np.zeros(vis.shape, dtype=bool)
-    for name in {"stokesi_mask", "sens_mask", "freq_mask"}:
+    for name in {"transient_mask", "static_mask", "sens_mask", "freq_mask"}:
         rfi_path = _pathutils.construct_file_path(name, rev, LSD)
         try:
             file = containers.RFIMask.from_file(rfi_path)
@@ -864,7 +864,13 @@ def plot_multiple_chisq(rev, csd_start, num_days, reverse=True, vmin=0.9, vmax=1
 
         # Load all input masks
         rfm = np.zeros(vis.shape, dtype=bool)
-        for name in {"stokesi_mask", "sens_mask", "freq_mask", "chisq_mask"}:
+        for name in {
+            "transient_mask",
+            "static_mask",
+            "sens_mask",
+            "freq_mask",
+            "chisq_mask",
+        }:
             rfi_path = _pathutils.construct_file_path(name, rev, csd)
             try:
                 file = containers.RFIMask.from_file(rfi_path)
