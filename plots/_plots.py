@@ -263,7 +263,7 @@ def plot_multiple_delay_power_spectra(
     fig.colorbar(im, ax=ax, location="top", aspect=40, pad=0.01)
     fig.supxlabel("NS baseline", fontsize=40)
     fig.supylabel("Delay [ns]", fontsize=40)
-    title = f"Signal Power - rev {rev:02d}, CSD range {csd_start}-{csd_start+num_days-1}, hpf = {hpf}"
+    title = f"Signal Power - rev {rev:02d}, CSD range {csd_start}-{csd_start + num_days - 1}, hpf = {hpf}"
     fig.suptitle(title, fontsize=40)
 
     # Remove the extra unused subplots
@@ -311,7 +311,7 @@ def plot_delay_power_spectrum_bands(
 
     mfig = plt.figure(
         layout="constrained",
-        figsize=(int(10 * plt_shape[1]), int(10 * plt_shape[0])),
+        figsize=(int(12 * plt_shape[1]), int(8 * plt_shape[0])),
     )
     subfigs = mfig.subfigures(*plt_shape, wspace=0.01)
 
@@ -345,7 +345,7 @@ def plot_delay_power_spectrum_bands(
         # Get the extent and any masking
         tau = dspec.index_map["delay"] * 1e3
         baseline_vec = dspec.index_map["baseline"]
-        bl_mask = _plotutils.mask_baselines(baseline_vec, single_mask=True)
+        bl_mask = _plotutils.mask_baselines(baseline_vec)
         bl_mask = np.tile(bl_mask, (len(tau), 1))
 
         for jj in range(4):
@@ -365,12 +365,28 @@ def plot_delay_power_spectrum_bands(
             ax[jj].yaxis.set_tick_params(labelsize=18)
             ax[jj].set_title(f"{jj}-cyl", fontsize=20)
 
-        fig.supxlabel("NS baseline length [m]", fontsize=20)
-        fig.supylabel("Delay [ns]", fontsize=20)
-        fig.suptitle(f"Freq band {_pathutils.FREQ_BANDS[ii]}", fontsize=20)
+        if (len(paths) - ii) < 2:
+            # Only add the x label on the bottom row
+            fig.supxlabel("NS baseline length [m]", fontsize=20)
+
+        if not (ii % 2):
+            # Only add the label on the left side
+            fig.supylabel("Delay [ns]", fontsize=20)
+            clabel = ""
+        else:
+            clabel = "Signal Power"
+
+        # Add the colorbar label on the right
         fig.colorbar(
-            im, ax=ax, orientation="vertical", label="Signal Power", pad=0.02, aspect=40
+            im,
+            ax=ax,
+            orientation="vertical",
+            label=clabel,
+            pad=0.02,
+            aspect=40,
         )
+
+        fig.suptitle(f"Band {str(_pathutils.FREQ_BANDS[ii]).upper()}", fontsize=25)
 
     title = _plotutils.format_title(rev, LSD)
     mfig.suptitle(title, fontsize=25)
@@ -653,7 +669,7 @@ def plot_sensitivity_metric(rev, LSD, vmin=0.995, vmax=1.005):
     cmap.set_bad(_plotutils.BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(50, 20))
+    mfig = plt.figure(layout="constrained", figsize=(50, 25))
     # MAke the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -666,7 +682,6 @@ def plot_sensitivity_metric(rev, LSD, vmin=0.995, vmax=1.005):
     patches = [None, mask_patch]
 
     for ii, (fig, sim) in enumerate(zip(subfigs, (sensrat, sensrat_mask))):
-
         axis = fig.subplots(1, 1)
         extent = (*_ephemutils.get_extent(times[sel], LSD), 400, 800)
         im = axis.imshow(
@@ -749,7 +764,7 @@ def plot_chisq_metric(rev, LSD, vmin=0.9, vmax=1.4):
     cmap.set_bad(_plotutils.BAD_VALUE_COLOR)
 
     # Make the master figure
-    mfig = plt.figure(layout="constrained", figsize=(50, 20))
+    mfig = plt.figure(layout="constrained", figsize=(50, 25))
     # Make the two sub-figures
     subfigs = mfig.subfigures(1, 2, wspace=0.1)
 
@@ -765,7 +780,6 @@ def plot_chisq_metric(rev, LSD, vmin=0.9, vmax=1.4):
     patches = [patch1, patch2]
 
     for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
-
         axis = fig.subplots(1, 1)
         extent = (*_ephemutils.get_extent(times[sel], LSD), 400, 800)
         im = axis.imshow(
@@ -909,7 +923,7 @@ def plot_multiple_chisq(rev, csd_start, num_days, reverse=True, vmin=0.9, vmax=1
     fig.colorbar(im, ax=ax, location="top", aspect=40, pad=0.01)
     fig.supxlabel("RA [deg]", fontsize=40)
     fig.supylabel("Freq [MHz]", fontsize=40)
-    title = f"Chisq - rev {rev:02d}, CSD range {csd_start}-{csd_start+num_days-1}"
+    title = f"Chisq - rev {rev:02d}, CSD range {csd_start}-{csd_start + num_days - 1}"
     fig.suptitle(title, fontsize=40)
 
     # Remove the extra unused subplots
@@ -977,7 +991,6 @@ def plot_vis_power_metric(rev, LSD, vmin=0, vmax=5e1):
     patches = [patch1, patch2]
 
     for ii, (fig, sim) in enumerate(zip(subfigs, (vis, vis_mask))):
-
         axis = fig.subplots(1, 1)
         extent = (*_ephemutils.get_extent(times[sel], LSD), 400, 800)
         im = axis.imshow(
@@ -1222,7 +1235,7 @@ def plot_template_subtracted_point_source_spectra(rev, LSD):
         axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
 
         axis.set_xlabel("Freq [MHz]", fontsize=25)
-        axis.set_ylabel("Flux Density [Jy]", fontsize=25)
+        axis.set_ylabel("Flux Density Ratio [Jy/Jy]", fontsize=25)
         axis.set_title(data.id[ii], fontsize=30)
 
         axis.minorticks_on()

@@ -87,7 +87,6 @@ def events(observer=chime_obs, lsd=None):
             e["sun_set"] = u2l(t)
 
     for name, body in bodies.items():
-
         tt = observer.transit_times(body, st, et)
 
         if tt.size > 0:
