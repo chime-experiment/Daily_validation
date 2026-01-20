@@ -846,8 +846,8 @@ def plot_template_subtracted_ringmap_chisq(rev, LSD):
         rmp = rm[pol]
 
         rmc = rmp.compressed()
-        vmin = np.percentile(rmc, 5).astype(float)
-        vmax = np.percentile(rmc, 95).astype(float)
+        vmin = np.percentile(rmc, 2).astype(float)
+        vmax = np.percentile(rmc, 98).astype(float)
 
         im = axes[pol].imshow(
             rm[pol],
@@ -1285,6 +1285,10 @@ def plot_template_subtracted_point_source_spectra(rev, LSD):
 
         spectrum = np.ma.masked_where(data.weight[ii, 0] == 0.0, data.beam[ii, 0])
 
+        sc = spectrum.compressed()
+        vmin = np.percentile(sc, 2) - 10
+        vmax = np.percentile(sc, 98) + 10
+
         axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
 
         axis.set_xlabel("Freq [MHz]", fontsize=25)
@@ -1295,7 +1299,7 @@ def plot_template_subtracted_point_source_spectra(rev, LSD):
         axis.grid(which="major", ls="--", alpha=0.6)
         axis.grid(which="minor", ls=":", alpha=0.4)
 
-        axis.set_ybound([1e0, 5e2])
+        axis.set_ybound([vmin, vmax])
 
     title = _plotutils.format_title(rev, LSD)
     fig.suptitle(title, fontsize=40)
