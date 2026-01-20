@@ -37,6 +37,7 @@ sf_obs = chime_obs.skyfield_obs()
 
 __all__ = [
     "plot_delay_power_spectrum",
+    "plot_delay_power_spectrum_bands",
     "plot_multiple_delay_power_spectra",
     "plot_ringmap",
     "plot_template_subtracted_ringmap",
@@ -275,6 +276,105 @@ def plot_multiple_delay_power_spectra(
 
     del DS
     print(f"Data products found for {num_days - count}/{num_days} days.")
+
+
+# @_util.fail_quietly
+def plot_delay_power_spectrum_bands(
+    rev,
+    LSD,
+    clim=[1e-4, 1e3],
+    cmap="inferno",
+):
+    """Plot the delay spectra for a given LSD, assuming multiple bands.
+
+    Parameters
+    ----------
+    rev : int
+        Revision
+    LSD : int
+        Day
+    clim : list, optional
+        min, max values for the colorscale for each plot
+    camp : str, optional
+        Colourmap. Default is 'inferno'.
+    """
+
+    num_bands = len(_pathutils.FREQ_BANDS)
+
+    if bool(num_bands % 2):
+        extra_row = 1
+    else:
+        extra_row = 0
+
+    plt_shape = (num_bands // 2 + extra_row, 2)
+
+    mfig = plt.figure(
+        layout="constrained",
+        figsize=(int(10 * plt_shape[1]), int(10 * plt_shape[0])),
+    )
+    subfigs = mfig.subfigures(*plt_shape, wspace=0.01)
+
+    # Set up image parameters
+    im = None
+    imshow_params = {
+        "origin": "lower",
+        "aspect": "auto",
+        "interpolation": "nearest",
+        "norm": LogNorm(),
+        "clim": clim,
+        "cmap": cmap,
+    }
+
+    paths = _pathutils.construct_file_path_for_bands("delayspectrum", rev, LSD)
+
+    for ii, (fpath, fig) in enumerate(zip(paths, subfigs.ravel())):
+        ax = fig.subplots(1, 4, sharey=True, gridspec_kw={"width_ratios": [1, 2, 2, 2]})
+
+        try:
+            dspec = containers.DelaySpectrum.from_file(fpath)
+        except FileNotFoundError:
+            for axis in ax:
+                # Hide the axis but don't disable it
+                _plotutils.hide_axis_ticks(axis)
+                # Grey out the subplot
+                axis.set_facecolor("#686868")
+            # Don't continue with this plot
+            continue
+
+        # Get the extent and any masking
+        tau = dspec.index_map["delay"] * 1e3
+        baseline_vec = dspec.index_map["baseline"]
+        bl_mask = _plotutils.mask_baselines(baseline_vec, single_mask=True)
+        bl_mask = np.tile(bl_mask, (len(tau), 1))
+
+        for jj in range(4):
+            baseline_idx_sorted = baseline_vec[bl_mask[jj], 1].argsort()
+            extent = [
+                baseline_vec[bl_mask[jj], 1].min(),
+                baseline_vec[bl_mask[jj], 1].max(),
+                tau[0],
+                tau[-1],
+            ]
+            im = ax[jj].imshow(
+                dspec.spectrum[bl_mask[jj]][baseline_idx_sorted].T.real,
+                extent=extent,
+                **imshow_params,
+            )
+            ax[jj].xaxis.set_tick_params(labelsize=18)
+            ax[jj].yaxis.set_tick_params(labelsize=18)
+            ax[jj].set_title(f"{jj}-cyl", fontsize=20)
+
+        fig.supxlabel("NS baseline length [m]", fontsize=20)
+        fig.supylabel("Delay [ns]", fontsize=20)
+        fig.suptitle(f"Freq band {_pathutils.FREQ_BANDS[ii]}", fontsize=20)
+        fig.colorbar(
+            im, ax=ax, orientation="vertical", label="Signal Power", pad=0.02, aspect=40
+        )
+
+    title = _plotutils.format_title(rev, LSD)
+    mfig.suptitle(title, fontsize=25)
+
+    plt.show()
 
 
 @_util.fail_quietly
