@@ -44,7 +44,7 @@ def csd_to_utc(csd: int | str, include_time: bool = False) -> str:
     date = chime_obs.lsd_to_unix(int(csd))
 
     if include_time:
-        fmt = "%Y/%m/%d %H/%M/%S"
+        fmt = "%Y/%m/%d %H:%M:%S"
     else:
         fmt = "%Y/%m/%d"
 
