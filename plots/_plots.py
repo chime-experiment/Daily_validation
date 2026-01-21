@@ -1286,8 +1286,8 @@ def plot_template_subtracted_point_source_spectra(rev, LSD):
         spectrum = np.ma.masked_where(data.weight[ii, 0] == 0.0, data.beam[ii, 0])
 
         sc = spectrum.compressed()
-        vmin = np.percentile(sc, 2) - 10
-        vmax = np.percentile(sc, 98) + 10
+        vmin = np.percentile(sc, 2) - 50
+        vmax = np.percentile(sc, 98) + 50
 
         axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
 
