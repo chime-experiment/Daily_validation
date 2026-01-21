@@ -47,7 +47,7 @@ __all__ = [
     "plot_multiple_chisq",
     "plot_vis_power_metric",
     "plot_factorized_mask",
-    "plot_rainfall",
+    "plot_rainfall_and_flags",
     "plot_point_source_spectra",
     "plot_template_subtracted_point_source_spectra",
     "plot_point_source_stability",
@@ -1196,7 +1196,7 @@ def plot_factorized_mask(rev, LSD):
 
 
 @_util.fail_quietly
-def plot_rainfall(rev, LSD):
+def plot_rainfall_and_flags(rev, LSD):
     # Plot cumulative rainfall throughout the day
     start_time = chime_obs.lsd_to_unix(LSD)
     finish_time = chime_obs.lsd_to_unix(LSD + 1)
@@ -1205,10 +1205,50 @@ def plot_rainfall(rev, LSD):
 
     rain = compute_cumulative_rainfall(times)
 
-    fig = plt.figure(layout="constrained", figsize=(18, 5))
-    axis = fig.subplots(1, 1)
+    fig = plt.figure(layout="constrained", figsize=(18, 10))
+    ax = fig.subplots(
+        2, 1, sharex=True, gridspec_kw=dict(height_ratios=[1, 2], hspace=0.0)
+    )
 
-    axis.plot(
+    # Search for database flags for this day
+    flags_by_type = {}
+
+    for type_, start, end in _util.get_data_flags(LSD):
+        if (start > finish_time) or (end < start_time):
+            continue
+
+        if type_ not in flags_by_type:
+            flags_by_type[type_] = np.zeros_like(times, dtype=bool)
+
+        flags_by_type[type_][(times > start) & (times < end)] = True
+    if not flags_by_type:
+        # No database flags for this day
+        ax[0].set_facecolor("#686868")
+        _plotutils.hide_axis_ticks(ax[0])
+        ax[0].text(
+            0.5,
+            0.5,
+            "No Database Flags",
+            horizontalalignment="center",
+            verticalalignment="center",
+            fontsize=25,
+            transform=ax[0].transAxes,
+            color="white",
+        )
+    else:
+        # Plot axis is in RA, so need to convert for `fill_between`
+        ra = 360.0 * (chime_obs.unix_to_lsd(times) - LSD)
+        for ii, (type_, series) in enumerate(flags_by_type.items()):
+            ax[0].fill_between(
+                ra, ii, ii + 1, where=series, label=type_, color=f"C{ii}", alpha=0.8
+            )
+
+        ax[0].set_ylim(0, ii + 1)
+        ax[0].set_ylabel("Flags", fontsize=20)
+        ax[0].legend(fancybox=True, shadow=True, loc=1)
+
+    # Draw the rainfall plot
+    ax[1].plot(
         np.linspace(0, 360, 4096, endpoint=False),
         rain,
         color="tab:blue",
@@ -1216,21 +1256,20 @@ def plot_rainfall(rev, LSD):
         ls=":",
         label="cumulative rainfall",
     )
-    axis.axhline(1.0, color="tab:red", ls="-", label="flagging threshold")
+    ax[1].axhline(1.0, color="tab:red", ls="-", label="flagging threshold")
 
-    axis.set_xbound(0, 360)
+    ax[1].set_xbound(0, 360)
 
     if np.all(rain == 0):
-        axis.set_ybound(0, 2)
+        ax[1].set_ybound(0, 2)
 
     # Set labels
-    axis.set_xlabel("RA [deg]", fontsize=20)
-    axis.set_ylabel("Cumulative rainfall [mm]", fontsize=20)
+    ax[1].set_xlabel("RA [deg]", fontsize=20)
+    ax[1].set_ylabel("Cumulative rainfall [mm]", fontsize=20)
+    ax[1].legend(fancybox=True, ncol=2, shadow=True)
 
     title = _plotutils.format_title(rev, LSD)
-    axis.set_title(title, fontsize=20)
-
-    axis.legend(fancybox=True, ncol=2, shadow=True)
+    fig.suptitle(title, fontsize=25)
 
 
 @_util.fail_quietly
