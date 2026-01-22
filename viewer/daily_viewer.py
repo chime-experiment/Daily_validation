@@ -14,6 +14,7 @@ import http.cookies
 import peewee as pw
 import urllib.parse
 import chimedb.core as db
+from datetime import datetime
 from chimedb.core.mediawiki import MediaWikiUser
 from chimedb.dataflag import (
     DataFlagClient,
@@ -590,6 +591,12 @@ def csd_data(target, source, rev, user):
     # Get the user's current opinion for the selected CSD, for all available revisions
     # The opinions include the opinion count for _all_ users.
     selections["opinions"] = get_opinions_for_csd(target, revs, user)
+
+    # Calculate the date for the selected CSD
+
+    csd_start = datetime.fromtimestamp(selections["csd"] * 86400 * 0.9972697936296091 + 1384489290.2213902)
+    csd_end = datetime.fromtimestamp((1 + selections["csd"]) * 86400 * 0.9972697936296091 + 1384489290.2213902)
+    selections["csd_date"] = '<a id="csd-date" class="csd-date" href="https://bao.chimenet.ca/wiki/index.php/Run_Notes_-_' + csd_end.strftime("%B_%Y#%Y-%m-%d") + '">' + csd_start.strftime("%Y-%m-%d %H:%M") + " -- " + csd_end.strftime("%Y-%m-%d %H:%M") + "</a>"
 
     return selections
 

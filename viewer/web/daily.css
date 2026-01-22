@@ -133,3 +133,8 @@ button.pickrev-bad {
 button.pickrev-selected {
   border-style: inset;
 }
+
+a.csd-date {
+  color: #CCF;
+  font-weight: bold;
+}

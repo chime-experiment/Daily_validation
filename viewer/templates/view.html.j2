@@ -44,7 +44,7 @@ var opinions = {{ opinions }};
 <input type="radio" id="opinion-unsure" name="opinion" onclick="set_disable('opinion-notes', false)" value="unsure"{% if opinions[rev].decision == "unsure" %} checked{% endif %}><label for="opinion-unsure">Unsure</label>
 <input type="radio" id="opinion-good" name="opinion" onclick="set_disable('opinion-notes', false)" value="good"{% if opinions[rev].decision == "good" %} checked{% endif %}><label for="opinion-good">Good</label>
 </div>
-<label for="opinion-notes">Notes:</label><br/>
+<label for="opinion-notes">Notes ({{csd_date}}):</label><br/>
 <textarea id="opinion-notes" name="notes" rows="6" cols="80" placeholder="Opinion notes"{% if opinions[rev].decision == "none" %} disabled{% endif %}>{{ opinions[rev].notes | d("") }}</textarea>
 </div>
 {% endblock %}
