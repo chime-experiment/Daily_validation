@@ -87,6 +87,30 @@ function update_data(result) {
   draw_ui(csd_changed || rev_changed)
 }
 
+// Given a Date, format it as YYYY-MM-DD HH:MM
+function format_date(date) {
+  var year = date.getFullYear();
+  var month = "0" + (1 + date.getMonth());
+  var day = "0" + date.getDate();
+  var hour = "0" + date.getHours();
+  var minute = "0" + date.getMinutes();
+
+  var date_format = year + "-" + month.substr(-2) + "-" + day.substr(-2)
+  var time_format = hour.substr(-2) + ":" + minute.substr(-2)
+  return date_format + " " + time_format
+}
+
+// Given a Date, return a link to the day in the run notes
+function runnotes_href(date) {
+  var month_names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var year = date.getFullYear();
+  var mname = month_names[date.getMonth()];
+  var month = "0" + (1 + date.getMonth());
+  var day = "0" + date.getDate();
+
+  return "https://bao.chimenet.ca/wiki/index.php/Run_Notes_-_" + mname + "_" + year + "#" + year + "-" + month.substr(-2) + "-" + day.substr(-2)
+}
+
 // Update the UI based on the contents of the globals
 function draw_ui(view_changed) {
   console.log("draw_ui: " + view_changed)
@@ -138,6 +162,22 @@ function draw_ui(view_changed) {
 
   // Set opinion title
   document.getElementById("opinion-h2").innerHTML = "Opinion for CSD #" + csd + ", rev " + rev
+
+  // Calculate CSD dates
+
+  // Length of the sidereal day in seconds
+  sidereal_day_seconds = 86400 * 0.9972697936296091
+  // CSD zero point.  Seconds since the UNIX epoch when the local stellar angle
+  // (LSA) was zero on the day of the CHIME Pathfinder first light (2013-11-05).
+  csd_zero_date = 1384489290.2213902
+
+  // Date() takes milliseconds since the epoch, hence the factor of 1000
+  csd_start = new Date(1000 * (csd * sidereal_day_seconds + csd_zero_date))
+  csd_end = new Date(1000 * ((1 + csd) * sidereal_day_seconds + csd_zero_date))
+
+  // Set Run notes text and link
+  document.getElementById("csd-date").innerHTML = format_date(csd_start) + " -- " + format_date(csd_end)
+  document.getElementById("csd-date").href = runnotes_href(csd_end)
 
   // Set opinion decision
   var decision = opinion.decision
