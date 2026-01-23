@@ -601,9 +601,21 @@ def csd_data(target, source, rev, user):
     # (2013-11-05).
     csd_zero_date = 1384489290.2213902
 
-    csd_start = datetime.fromtimestamp(selections["csd"] * sidereal_day_seconds + csd_zero_date)
-    csd_end = datetime.fromtimestamp((1 + selections["csd"]) * sidereal_day_seconds + csd_zero_date)
-    selections["csd_date"] = '<a id="csd-date" class="csd-date" href="https://bao.chimenet.ca/wiki/index.php/Run_Notes_-_' + csd_end.strftime("%B_%Y#%Y-%m-%d") + '">' + csd_start.strftime("%Y-%m-%d %H:%M") + " -- " + csd_end.strftime("%Y-%m-%d %H:%M") + "</a>"
+    csd_start = datetime.fromtimestamp(
+        selections["csd"] * sidereal_day_seconds + csd_zero_date
+    )
+    csd_end = datetime.fromtimestamp(
+        (1 + selections["csd"]) * sidereal_day_seconds + csd_zero_date
+    )
+    selections["csd_date"] = (
+        '<a id="csd-date" class="csd-date" href="https://bao.chimenet.ca/wiki/index.php/Run_Notes_-_'
+        + csd_end.strftime("%B_%Y#%Y-%m-%d")
+        + '">'
+        + csd_start.strftime("%Y-%m-%d %H:%M")
+        + " -- "
+        + csd_end.strftime("%Y-%m-%d %H:%M")
+        + "</a>"
+    )
 
     return selections
 
