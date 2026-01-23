@@ -1282,7 +1282,7 @@ def plot_point_source_spectra(rev, LSD):
     scales = [(1800, 5500), (1800, 5500), (200, 2000), (0, 1000)]
 
     # Make a figure
-    fig, ax = plt.subplots(2, 2, figsize=(50, 25))
+    fig, ax = plt.subplots(2, 2, figsize=(50, 25), sharex=True, sharey=True)
 
     for ii in range(4):
         axis = ax[ii // 2, ii % 2]
@@ -1293,8 +1293,12 @@ def plot_point_source_spectra(rev, LSD):
         axis.plot(data.freq, predicted, color="k", lw=2, ls="--", label="Predicted")
         axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
 
-        axis.set_xlabel("Freq [MHz]", fontsize=25)
-        axis.set_ylabel("Flux Density [Jy]", fontsize=25)
+        if ii > 1:
+            axis.set_xlabel("Freq [MHz]", fontsize=25)
+
+        if not ii % 2:
+            axis.set_ylabel("Flux Density [Jy]", fontsize=25)
+
         axis.set_title(data.id[ii], fontsize=30)
 
         axis.minorticks_on()
@@ -1302,6 +1306,7 @@ def plot_point_source_spectra(rev, LSD):
         axis.grid(which="minor", ls=":", alpha=0.4)
 
         axis.set_ybound(scales[ii])
+        axis.legend(fontsize=20)
 
     title = _plotutils.format_title(rev, LSD)
     fig.suptitle(title, fontsize=40)
@@ -1310,28 +1315,42 @@ def plot_point_source_spectra(rev, LSD):
 
 
 @_util.fail_quietly
-def plot_template_subtracted_point_source_spectra(rev, LSD):
+def plot_template_subtracted_point_source_spectra(rev, LSD, template_rev=6):
     """Plot spectra of a selection of template-subtracted point sources."""
-    path = _pathutils.construct_file_path("sourceflux_template_subtract", rev, LSD)
+    path = _pathutils.construct_file_path("sourceflux", rev, LSD)
     # Only load four brightest sources
     data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
 
+    # Load the templates
+    patht = template_path / f"spectra_rev{template_rev:02d}.h5"
+    template = containers.FormedBeam.from_file(patht, object_id_sel=slice(0, 4))
+
     # Make a figure
-    fig, ax = plt.subplots(2, 2, figsize=(50, 25))
+    fig, ax = plt.subplots(2, 2, figsize=(50, 25), sharex=True, sharey=True)
 
     for ii in range(4):
         axis = ax[ii // 2, ii % 2]
 
-        spectrum = np.ma.masked_where(data.weight[ii, 0] == 0.0, data.beam[ii, 0])
+        specmask = (data.weight[ii, 0] == 0.0) | (template.weight[ii, 0] == 0)
 
-        sc = spectrum.compressed()
-        vmin = np.percentile(sc, 2) - 50
-        vmax = np.percentile(sc, 98) + 50
+        spectrum = data.beam[ii, 0] - template.beam[ii, 0]
+        spectrum *= invert_no_zero(np.abs(template.beam[ii, 0]))
+        spectrum = np.ma.masked_where(specmask, spectrum)
 
-        axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
+        vmin = -0.5
+        vmax = 0.5
 
-        axis.set_xlabel("Freq [MHz]", fontsize=25)
-        axis.set_ylabel("Flux Density [Jy]", fontsize=25)
+        axis.axhline(0.0, color="k", ls="--", lw=2, label="Predicted (equal)")
+        axis.plot(
+            data.freq, spectrum, color="tab:red", lw=3, label="Measured Difference"
+        )
+
+        if ii > 1:
+            axis.set_xlabel("Freq [MHz]", fontsize=25)
+
+        if not ii % 2:
+            axis.set_ylabel(r"$(S - S_{template}) \ / \ |S_{template}|$", fontsize=25)
+
         axis.set_title(data.id[ii], fontsize=30)
 
         axis.minorticks_on()
@@ -1339,6 +1358,7 @@ def plot_template_subtracted_point_source_spectra(rev, LSD):
         axis.grid(which="minor", ls=":", alpha=0.4)
 
         axis.set_ybound([vmin, vmax])
+        axis.legend(fontsize=20)
 
     title = _plotutils.format_title(rev, LSD)
     fig.suptitle(title, fontsize=40)
