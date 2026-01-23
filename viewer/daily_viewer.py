@@ -594,8 +594,15 @@ def csd_data(target, source, rev, user):
 
     # Calculate the date for the selected CSD
 
-    csd_start = datetime.fromtimestamp(selections["csd"] * 86400 * 0.9972697936296091 + 1384489290.2213902)
-    csd_end = datetime.fromtimestamp((1 + selections["csd"]) * 86400 * 0.9972697936296091 + 1384489290.2213902)
+    # Length of the sidereal day in seconds
+    sidereal_day_seconds = 86400 * 0.9972697936296091
+    # CSD zero point.  Seconds since the UNIX epoch when the local stellar
+    # angle (LSA) was zero on the day of the CHIME Pathfinder first light
+    # (2013-11-05).
+    csd_zero_date = 1384489290.2213902
+
+    csd_start = datetime.fromtimestamp(selections["csd"] * sidereal_day_seconds + csd_zero_date)
+    csd_end = datetime.fromtimestamp((1 + selections["csd"]) * sidereal_day_seconds + csd_zero_date)
     selections["csd_date"] = '<a id="csd-date" class="csd-date" href="https://bao.chimenet.ca/wiki/index.php/Run_Notes_-_' + csd_end.strftime("%B_%Y#%Y-%m-%d") + '">' + csd_start.strftime("%Y-%m-%d %H:%M") + " -- " + csd_end.strftime("%Y-%m-%d %H:%M") + "</a>"
 
     return selections

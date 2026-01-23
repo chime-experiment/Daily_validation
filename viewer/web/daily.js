@@ -164,8 +164,16 @@ function draw_ui(view_changed) {
   document.getElementById("opinion-h2").innerHTML = "Opinion for CSD #" + csd + ", rev " + rev
 
   // Calculate CSD dates
-  csd_start = new Date(1000 * (csd * 86400 * 0.9972697936296091 + 1384489290.2213902))
-  csd_end = new Date(1000 * ((1 + csd) * 86400 * 0.9972697936296091 + 1384489290.2213902))
+
+  // Length of the sidereal day in seconds
+  sidereal_day_seconds = 86400 * 0.9972697936296091
+  // CSD zero point.  Seconds since the UNIX epoch when the local stellar angle
+  // (LSA) was zero on the day of the CHIME Pathfinder first light (2013-11-05).
+  csd_zero_date = 1384489290.2213902
+
+  // Date() takes milliseconds since the epoch, hence the factor of 1000
+  csd_start = new Date(1000 * (csd * sidereal_day_seconds + csd_zero_date))
+  csd_end = new Date(1000 * ((1 + csd) * sidereal_day_seconds + csd_zero_date))
 
   // Set Run notes text and link
   document.getElementById("csd-date").innerHTML = format_date(csd_start) + " -- " + format_date(csd_end)
