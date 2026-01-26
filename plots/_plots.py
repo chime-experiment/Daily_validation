@@ -344,7 +344,7 @@ def plot_delay_power_spectrum_bands(
             continue
 
         # Get the extent and any masking
-        tau = dspec.index_map["delay"] * 1e3
+        tau = dspec.index_map["delay"]
         baseline_vec = dspec.index_map["baseline"]
         bl_mask = _plotutils.mask_baselines(baseline_vec)
         bl_mask = np.tile(bl_mask, (len(tau), 1))
@@ -372,7 +372,7 @@ def plot_delay_power_spectrum_bands(
 
         if not (ii % 2):
             # Only add the label on the left side
-            fig.supylabel("Delay [ns]", fontsize=20)
+            fig.supylabel("Delay [%\mu$s]", fontsize=20)
             clabel = ""
         else:
             clabel = "Signal Power"
