@@ -372,7 +372,7 @@ def plot_delay_power_spectrum_bands(
 
         if not (ii % 2):
             # Only add the label on the left side
-            fig.supylabel("Delay [%\mu$s]", fontsize=20)
+            fig.supylabel("Delay [$\mu$s]", fontsize=20)
             clabel = ""
         else:
             clabel = "Signal Power"
@@ -1273,24 +1273,40 @@ def plot_rainfall_and_flags(rev, LSD):
 
 
 @_util.fail_quietly
-def plot_point_source_spectra(rev, LSD):
+def plot_point_source_spectra(rev, LSD, template_rev=6):
     """Plot spectra of a selection of point sources."""
     path = _pathutils.construct_file_path("sourceflux", rev, LSD)
     # Only load CAS_A, CYG_A, TAU_A, VIR_A
     data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
 
+    # Load templates
+    patht = template_path / f"spectra_rev{template_rev:02d}.h5"
+    template = containers.FormedBeam.from_file(patht, object_id_sel=slice(0, 4))
+
     scales = [(1800, 5500), (1800, 5500), (200, 2000), (0, 1000)]
 
     # Make a figure
-    fig, ax = plt.subplots(2, 2, figsize=(50, 25), sharex=True, sharey=True)
+    fig, ax = plt.subplots(2, 2, figsize=(50, 25), sharex=True)
 
     for ii in range(4):
         axis = ax[ii // 2, ii % 2]
 
         spectrum = np.ma.masked_where(data.weight[ii, 0] == 0.0, data.beam[ii, 0])
         predicted = fluxcat.FluxCatalog[data.id[ii]].predict_flux(data.freq)
+        spec_template = np.ma.masked_where(
+            template.weight[ii, 0] == 0, template.beam[ii, 0]
+        )
 
-        axis.plot(data.freq, predicted, color="k", lw=2, ls="--", label="Predicted")
+        axis.plot(data.freq, predicted, color="k", lw=2, ls=":", label="Theory")
+        axis.plot(
+            data.freq,
+            spec_template,
+            color="tab:blue",
+            lw=2,
+            ls="--",
+            label="Template",
+            alpha=0.9,
+        )
         axis.plot(data.freq, spectrum, color="tab:red", lw=3, label="Measured")
 
         if ii > 1:
