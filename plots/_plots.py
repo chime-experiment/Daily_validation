@@ -1280,7 +1280,7 @@ def plot_point_source_spectra(rev, LSD, template_rev=6):
     data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
 
     # Load templates
-    patht = template_path / f"spectra_rev{template_rev:02d}.h5"
+    patht = template_path / f"spectra_rev{template_rev:02d}_extra_mask.h5"
     template = containers.FormedBeam.from_file(patht, object_id_sel=slice(0, 4))
 
     scales = [(1800, 5500), (1800, 5500), (200, 2000), (0, 1000)]
@@ -1338,7 +1338,7 @@ def plot_template_subtracted_point_source_spectra(rev, LSD, template_rev=6):
     data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
 
     # Load the templates
-    patht = template_path / f"spectra_rev{template_rev:02d}.h5"
+    patht = template_path / f"spectra_rev{template_rev:02d}_extra_mask.h5"
     template = containers.FormedBeam.from_file(patht, object_id_sel=slice(0, 4))
 
     # Make a figure
