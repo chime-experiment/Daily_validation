@@ -87,13 +87,69 @@ function update_data(result) {
   draw_ui(csd_changed || rev_changed)
 }
 
+// Given a UNIX Epoch time, return a naive Date representing Pacific Time
+// ("naive" here means we offset the internal UTC of the Date to account
+// for the timezone offset).
+function pacific_date(unix_seconds) {
+  // The ultimate plan here is to store a Pacific time in a Date object
+  // naively.
+
+  // Step one: Create a UTC Date object.  These take millisconds since the
+  // Epoch
+  date = new Date(unix_seconds * 1000)
+
+  // Step two: figure out when daylight savings happens in British Columbia
+
+  // Daylight savings time starts on the second Sunday of March, at 2AM local
+  // time, which is 10AM UTC.
+  //
+  // Start with 8 March of the current year at 10AM UTC
+  dst_start = new Date(Date.UTC(date.getUTCFullYear(), 2, 8, 10, 0, 0))
+
+  // If this is already Sunday, we're bang up to the elephant and can stop.
+  // Otherweise, advance through the remainder of the week to the next Sunday.
+  //
+  // The factor of 1000 is because get/setTime deals in milliseconds.
+  day_of_week = dst_start.getUTCDay()
+  if (day_of_week != 0) {
+    dst_start = dst_start.setTime(dst_start.getTime() + 1000 * 86400 * (7 - day_of_week))
+  }
+
+  // Daylight savings time ends on the first Sunday of November, at 2AM local
+  // time, which is 9AM UTC.
+  //
+  // This calculation is the same as the last, but we start on 1 November
+  // of the current year at 9AM UTC
+  dst_end = new Date(Date.UTC(date.getUTCFullYear(), 10, 1, 9, 0, 0))
+  day_of_week = dst_end.getUTCDay()
+  if (day_of_week != 0) {
+    dst_end = dst_end.setTime(dst_end.getTime() + 1000 * 86400 * (7 - day_of_week))
+  }
+
+  // Step three: figure out the TZ offset
+  if (date < dst_start || date >= dst_end) {
+    // PST, offset is UTC-8
+    tz_offset = 8
+  } else {
+    // PDT, offset is UTC-7
+    tz_offset = 7
+  }
+
+  // Step four: decrement the UTC time of the original date so that
+  // it now effectively gives us Pacific Time
+  return new Date(date.getTime() - 1000 * 3600 * tz_offset)
+}
+
 // Given a Date, format it as YYYY-MM-DD HH:MM
 function format_date(date) {
-  var year = date.getFullYear();
-  var month = "0" + (1 + date.getMonth());
-  var day = "0" + date.getDate();
-  var hour = "0" + date.getHours();
-  var minute = "0" + date.getMinutes();
+  // The date passed in is a naive Pacific Time date, so
+  // we need to use the getUTC... functions to retrieve the
+  // date elements.
+  var year = date.getUTCFullYear();
+  var month = "0" + (1 + date.getUTCMonth());
+  var day = "0" + date.getUTCDate();
+  var hour = "0" + date.getUTCHours();
+  var minute = "0" + date.getUTCMinutes();
 
   var date_format = year + "-" + month.substr(-2) + "-" + day.substr(-2)
   var time_format = hour.substr(-2) + ":" + minute.substr(-2)
@@ -102,11 +158,14 @@ function format_date(date) {
 
 // Given a Date, return a link to the day in the run notes
 function runnotes_href(date) {
+  // The date passed in is a naive Pacific Time date, so
+  // we need to use the getUTC... functions to retrieve the
+  // date elements.
   var month_names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  var year = date.getFullYear();
-  var mname = month_names[date.getMonth()];
-  var month = "0" + (1 + date.getMonth());
-  var day = "0" + date.getDate();
+  var year = date.getUTCFullYear();
+  var mname = month_names[date.getUTCMonth()];
+  var month = "0" + (1 + date.getUTCMonth());
+  var day = "0" + date.getUTCDate();
 
   return "https://bao.chimenet.ca/wiki/index.php/Run_Notes_-_" + mname + "_" + year + "#" + year + "-" + month.substr(-2) + "-" + day.substr(-2)
 }
@@ -171,12 +230,13 @@ function draw_ui(view_changed) {
   // (LSA) was zero on the day of the CHIME Pathfinder first light (2013-11-05).
   csd_zero_date = 1384489290.2213902
 
-  // Date() takes milliseconds since the epoch, hence the factor of 1000
-  csd_start = new Date(1000 * (csd * sidereal_day_seconds + csd_zero_date))
-  csd_end = new Date(1000 * ((1 + csd) * sidereal_day_seconds + csd_zero_date))
+  // pacific_date() takes seconds since the UNIX epoch and returns a naive Date
+  // representing pacific time.
+  csd_start = pacific_date(csd * sidereal_day_seconds + csd_zero_date)
+  csd_end = pacific_date((1 + csd) * sidereal_day_seconds + csd_zero_date)
 
   // Set Run notes text and link
-  document.getElementById("csd-date").innerHTML = format_date(csd_start) + " -- " + format_date(csd_end)
+  document.getElementById("csd-date").innerHTML = format_date(csd_start) + " -- " + format_date(csd_end) + " PT"
   document.getElementById("csd-date").href = runnotes_href(csd_end)
 
   // Set opinion decision
