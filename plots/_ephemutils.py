@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from ch_util import cal_utils
 from ch_ephem.observers import chime as chime_obs
 from ch_ephem.sources import source_dictionary
-from caput import time as ctime
+from caput.astro import constants, skyfield
 
-eph = ctime.skyfield_wrapper.ephemeris
+eph = skyfield.skyfield_wrapper.ephemeris
 
 SOURCES = ["sun", "moon", "CAS_A", "CYG_A", "TAU_A", "VIR_A", "B0329+54"]
 
@@ -94,7 +94,7 @@ def events(observer=chime_obs, lsd=None):
         else:
             continue
 
-        sf_time = ctime.unix_to_skyfield_time(tt)
+        sf_time = skyfield.unix_to_skyfield_time(tt)
         pos = observer.skyfield_obs().at(sf_time).observe(body)
 
         alt = pos.apparent().altaz()[0]
@@ -109,7 +109,7 @@ def events(observer=chime_obs, lsd=None):
             window_deg = 2.0 * cal_utils.guess_fwhm(
                 800.0, pol="X", dec=dec.radians, sigma=True
             )
-            window_sec = window_deg * 240.0 * ctime.SIDEREAL_S
+            window_sec = window_deg * 240.0 * constants.SIDEREAL_S
 
             # Enter the transit timings in the output dict
             e[f"{name}_transit"] = u2l(tt)
