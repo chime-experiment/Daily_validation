@@ -10,9 +10,8 @@ import matplotlib.patches as mpatches
 from matplotlib.colors import LogNorm, ListedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from caput import weighted_median
-from caput.tools import invert_no_zero
-from caput import time as ctime
+from caput.algorithms import invert_no_zero, median
+from caput.astro import skyfield
 
 from draco.core import containers
 from draco.analysis.sidereal import _search_nearest
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Suppress all-NaN slice warning, since it doesn't affect the plots
 warnings.filterwarnings("ignore", message=r"All-NaN (slice|axis) encountered")
 
-eph = ctime.skyfield_wrapper.ephemeris
+eph = skyfield.skyfield_wrapper.ephemeris
 sf_obs = chime_obs.skyfield_obs()
 
 
@@ -502,7 +501,7 @@ def plot_template_subtracted_ringmap(
 
     # calculate a mask for the ringmap
     topos = sf_obs.vector_functions[-1]
-    sf_times = ctime.unix_to_skyfield_time(chime_obs.lsd_to_unix(csd_arr.ravel()))
+    sf_times = skyfield.unix_to_skyfield_time(chime_obs.lsd_to_unix(csd_arr.ravel()))
     daytime_mask = almanac.sunrise_sunset(eph, topos)(sf_times).reshape(csd_arr.shape)
     flag_mask = np.zeros_like(csd_arr, dtype=bool)
 
@@ -1508,7 +1507,7 @@ def plot_point_source_stability(
     ds = ds[valid][:, ipol]
 
     # Calculate the median absolute fractional deviation over frequency for each source
-    med_abs_ds = weighted_median.weighted_median(
+    med_abs_ds = median.weighted_median(
         np.abs(ds).astype(np.float64), flag.astype(np.float64)
     )
 
