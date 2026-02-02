@@ -614,7 +614,7 @@ def csd_data(target, source, rev, user):
         + csd_start.strftime("%Y-%m-%d %H:%M")
         + " -- "
         + csd_end.strftime("%Y-%m-%d %H:%M")
-        + "</a>"
+        + " PT</a>"
     )
 
     return selections
