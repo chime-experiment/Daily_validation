@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 BASE_PATH = Path("/project/rpp-chime/chime/chime_processed/daily")
+TEMPLATE_PATH = Path("/project/rpp-chime/chime/validation/templates")
 
 FILE_SPEC = {
     "ringmap": ("ringmap_", (".zarr.zip", ".h5")),

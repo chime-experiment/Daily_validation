@@ -2,7 +2,6 @@ import copy
 
 import numpy as np
 from skyfield import almanac
-from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -51,8 +50,6 @@ __all__ = [
     "plot_template_subtracted_point_source_spectra",
     "plot_point_source_stability",
 ]
-
-template_path = Path("/project/rpp-chime/chime/validation/templates")
 
 
 @_util.fail_quietly
@@ -532,7 +529,7 @@ def plot_template_subtracted_ringmap(
     rm_masked_all = np.where((flag_mask | weight_mask)[:, np.newaxis], np.nan, rm)
 
     # load ringmap template
-    path_stack = template_path / f"ringmap_rev{template_rev:02d}.zarr.zip"
+    path_stack = _pathutils.TEMPLATE_PATH / f"ringmap_rev{template_rev:02d}.zarr.zip"
     rm_stack = containers.RingMap.from_file(
         path_stack, freq_sel=slice(fi, fi + 1), pol_sel=slice(pi, pi + 1)
     )
@@ -1279,7 +1276,7 @@ def plot_point_source_spectra(rev, LSD, template_rev=6):
     data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
 
     # Load templates
-    patht = template_path / f"spectra_rev{template_rev:02d}_extra_mask.h5"
+    patht = _pathutils.TEMPLATE_PATH / f"spectra_rev{template_rev:02d}_extra_mask.h5"
     template = containers.FormedBeam.from_file(patht, object_id_sel=slice(0, 4))
 
     scales = [(1800, 5500), (1800, 5500), (200, 2000), (0, 1000)]
@@ -1337,7 +1334,7 @@ def plot_template_subtracted_point_source_spectra(rev, LSD, template_rev=6):
     data = containers.FormedBeam.from_file(path, object_id_sel=slice(0, 4))
 
     # Load the templates
-    patht = template_path / f"spectra_rev{template_rev:02d}_extra_mask.h5"
+    patht = _pathutils.TEMPLATE_PATH / f"spectra_rev{template_rev:02d}_extra_mask.h5"
     template = containers.FormedBeam.from_file(patht, object_id_sel=slice(0, 4))
 
     # Make a figure
@@ -1433,7 +1430,7 @@ def plot_point_source_stability(
         max_val = 3.0 if norm_sigma else 0.05
 
     # Load the template
-    patht = template_path / f"spectra_rev{template_rev:02d}.h5"
+    patht = _pathutils.TEMPLATE_PATH / f"spectra_rev{template_rev:02d}.h5"
     template = containers.FormedBeam.from_file(patht)
 
     # Load the data for this sidereal day
