@@ -637,11 +637,13 @@ def plot_sensitivity_metric(rev, LSD, vmin=0.995, vmax=1.005):
     # Load the relevant mask
     rfm = np.zeros((sens.measured[:].shape[0], sens.measured.shape[2]), dtype=bool)
     for name in {"sens_mask"}:
-        rfi_path = _pathutils.construct_file_path(name, rev, LSD)
         try:
-            file = containers.RFIMask.from_file(rfi_path)
-        except FileNotFoundError:
+            rfi_path = _pathutils.construct_file_path(name, rev, LSD)
+        except (FileNotFoundError, ValueError):
+            # ValueError if name not in FILE_SPEC
             continue
+
+        file = containers.RFIMask.from_file(rfi_path)
 
         rfm |= file.mask[:]
 
@@ -727,11 +729,12 @@ def plot_chisq_metric(rev, LSD, vmin=0.9, vmax=1.4):
     # Load all input masks
     rfm = np.zeros(vis.shape, dtype=bool)
     for name in {"transient_mask", "static_mask", "sens_mask", "freq_mask"}:
-        rfi_path = _pathutils.construct_file_path(name, rev, LSD)
         try:
-            file = containers.RFIMask.from_file(rfi_path)
-        except FileNotFoundError:
+            rfi_path = _pathutils.construct_file_path(name, rev, LSD)
+        except (FileNotFoundError, ValueError):
             continue
+
+        file = containers.RFIMask.from_file(rfi_path)
         rfm |= file.mask[:]
 
     # Load the chisq mask
@@ -998,11 +1001,12 @@ def plot_vis_power_metric(rev, LSD, vmin=0, vmax=5e1):
     # Load the relevant RFI mask
     rfm = np.zeros(vis.shape, dtype=bool)
     for name in {"stokesi_mask"}:
-        rfi_path = _pathutils.construct_file_path(name, rev, LSD)
         try:
-            file = containers.RFIMask.from_file(rfi_path)
-        except FileNotFoundError:
+            rfi_path = _pathutils.construct_file_path(name, rev, LSD)
+        except (FileNotFoundError, ValueError):
             continue
+
+        file = containers.RFIMask.from_file(rfi_path)
         rfm |= file.mask[:]
 
     # Apply the initial weight mask
