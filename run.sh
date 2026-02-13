@@ -104,7 +104,7 @@ echo "Scanning ${base} for rev_${rev} days to process..."
 
 days_to_process=()
 
-for f in $(revdir $rev)/*/delayspectrum_hpf*.h5
+for f in $(revdir $rev)/*/delayspectrum_*_bandc.h5
 do
     csd=$(basename $(dirname $f))
     outfile=$(optdir $rev)/$(htmlfile $csd)
