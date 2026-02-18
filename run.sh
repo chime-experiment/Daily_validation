@@ -52,6 +52,7 @@ wnbfile () {
 rev="latest"
 base="/project/rpp-chime/chime/chime_processed/daily"
 outputdir="/project/rpp-chime/chime/validation"
+kernel_name="pipe_rev09"
 trial=false
 
 # Process command line options
@@ -128,7 +129,7 @@ do
     printf "[%4i of %i] processing CSD=%i \n" $i ${#days_to_process[@]} $csd
 
     printf "  Executing notebook.\n"
-    papermill ${daily_notebook} $(dnbfile $csd) -p LSD ${csd} -p rev_id ${rev} -k python3 \
+    papermill ${daily_notebook} $(dnbfile $csd) -p LSD ${csd} -p rev_id ${rev} -k ${kernel_name} \
         --report-mode --no-log-output --no-progress-bar
     printf "  Converting notebook to html.\n"
     jupyter nbconvert --to html --no-input --output-dir=$(optdir $rev) $(dnbfile $csd)
@@ -137,7 +138,7 @@ done
 
 # Update the 14-day notebook as well
 printf "Processing grid of recent days.\n"
-papermill ${weekly_notebook} $(wnbfile) -p rev_id ${rev} -k python3 --report-mode \
+papermill ${weekly_notebook} $(wnbfile) -p rev_id ${rev} -k ${kernel_name} --report-mode \
     --no-log-output --no-progress-bar
 printf " Converting notebook to html.\n"
 jupyter nbconvert --to html --no-input --output-dir=$(optdir $rev) $(wnbfile)
