@@ -26,6 +26,10 @@ import warnings
 
 logger = logging.getLogger(__name__)
 
+# Disable "connection established" messages from chimedb
+chimedb_logger = logging.getLogger("chimedb")
+chimedb_logger.setLevel(logging.WARNING)
+
 # Suppress all-NaN slice warning, since it doesn't affect the plots
 warnings.filterwarnings("ignore", message=r"All-NaN (slice|axis) encountered")
 
